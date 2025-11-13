@@ -1,0 +1,465 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no"/>
+<title>DID AR • Focus-Lock Move • Capture</title>
+<style>
+  html,body{margin:0;height:100%;overflow:hidden;background:#000;overscroll-behavior:none}
+  canvas{position:fixed;inset:0;touch-action:none}
+  #uiTop{position:fixed;top:0;left:0;right:0;z-index:20;padding:10px;display:flex;gap:8px;flex-wrap:wrap;
+         font-family:system-ui,-apple-system,'Segoe UI',Roboto,'Noto Sans KR',sans-serif;
+         background:linear-gradient(to bottom,rgba(0,0,0,.6),rgba(0,0,0,0))}
+  .btn{color:#fff;background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.2);border-radius:10px;padding:8px 12px}
+  .btn.active{background:rgba(0,150,255,.45);border-color:rgba(0,150,255,.7)}
+  .group{display:flex;align-items:center;gap:6px;color:#fff}
+  input[type="range"]{width:180px}
+  #tray{position:fixed;left:0;right:0;bottom:0;z-index:21;background:rgba(0,0,0,.65);
+        border-top:1px solid rgba(255,255,255,.15);padding:8px 10px;display:flex;align-items:center;gap:10px;overflow-x:auto}
+  #thumbs{display:flex;gap:10px}
+  #tray .thumb{width:80px;height:48px;flex:0 0 auto;border-radius:8px;border:2px solid rgba(255,255,255,.25);overflow:hidden}
+  #tray .thumb img{width:100%;height:100%;object-fit:cover;display:block}
+  #tray .thumb.active{border-color:#4fc3ff;box-shadow:0 0 0 2px rgba(79,195,255,.5) inset}
+  #fileInput{display:none}
+  #fileLabel{color:#fff;border:1px dashed rgba(255,255,255,.35);padding:8px 12px;border-radius:10px}
+  #fab{position:fixed;left:16px;top:16px;z-index:22;padding:12px 14px;border-radius:10px;font-weight:700;
+       background:#2ea043;color:#fff;border:none;box-shadow:0 6px 24px rgba(0,0,0,.35)}
+  #capBtn{position:fixed;left:16px;bottom:96px;z-index:22;padding:14px 18px;border-radius:999px;font-weight:700;
+       background:#0ea5e9;color:#fff;border:none;box-shadow:0 6px 24px rgba(0,0,0,.35)}
+  #capBtn.disabled{opacity:.45;pointer-events:none;filter:grayscale(0.35)}
+  #pad{position:fixed;right:12px;bottom:170px;z-index:22;display:none;grid-template-columns:40px 40px 40px;gap:6px;align-items:center;justify-items:center}
+  #pad button{width:40px;height:40px;border-radius:8px;border:1px solid rgba(255,255,255,.2);background:rgba(0,0,0,.45);color:#fff;box-shadow:0 2px 8px rgba(0,0,0,.35)}
+  #pad .wide{grid-column:1/3;width:86px}
+  #padRow2{display:none;gap:6px;position:fixed;right:12px;bottom:120px;z-index:22;align-items:center}
+  #padRow2 .btn{padding:8px 10px}
+  #stepLabel,#rotStepLabel{color:#fff;min-width:60px;text-align:center}
+  .num::before{content:attr(data-n);display:inline-flex;align-items:center;justify-content:center;width:18px;height:18px;margin-right:6px;font-size:12px;font-weight:700;color:#fff;background:#13a10e;border-radius:50%}
+  #toast{position:fixed;left:50%;bottom:160px;transform:translateX(-50%);background:rgba(0,0,0,.75);color:#fff;padding:8px 12px;border-radius:10px;z-index:40;display:none}
+  #capStrip{position:fixed;left:8px;bottom:160px;z-index:21;display:flex;gap:6px;max-width:45vw;overflow-x:auto}
+  #capStrip img{width:72px;height:48px;border-radius:8px;border:1px solid rgba(255,255,255,.2);object-fit:cover}
+  #autoRow{position:fixed;left:16px;top:64px;z-index:22;display:flex;gap:8px;align-items:center;color:#fff}
+  #hint{position:fixed;left:0;right:0;bottom:150px;color:#fff;text-align:center;text-shadow:0 1px 2px #000;z-index:19;opacity:.85}
+</style>
+</head>
+<body>
+<div id="uiTop">
+  <button id="btnModeWall"  class="btn">벽걸이형(55")</button>
+  <button id="btnModeTotem" class="btn">스탠드(1900mm)</button>
+  <button id="btnBlack"     class="btn">블랙</button>
+  <button id="btnWhite"     class="btn">화이트</button>
+
+  <div class="group"><input type="checkbox" id="lockScale" checked/><label for="lockScale" style="color:#fff">실측 고정</label></div>
+  <div class="group">스케일 <input id="scaleRange" type="range" min="50" max="150" value="100" disabled> <span id="scaleVal" style="color:#fff">100%</span></div>
+  <div class="group">높이 <input id="heightRange" type="range" min="-1000" max="2500" value="0"> <span id="heightVal" style="color:#fff">0mm</span></div>
+  <button id="clearAll" class="btn">전체삭제</button>
+</div>
+
+<div id="autoRow">
+  <input id="autoCap" type="checkbox"/>
+  <label for="autoCap">배치 시 자동 캡처</label>
+</div>
+
+<div id="tray">
+  <div id="thumbs"></div>
+  <label id="fileLabel" for="fileInput" class="num" data-n="이미지">이미지 추가</label>
+  <input id="fileInput" type="file" accept="image/*" multiple/>
+  <div style="color:#fff;opacity:.75;">선택 기기 적용</div>
+  <input type="checkbox" id="applySelected" style="margin-left:6px"/>
+</div>
+
+<div id="capStrip"></div>
+<div id="hint">파란 링 탭=포커스 고정/해제(고정 시 초록색) • 포커스 고정+패드=링 이동 • 기기 선택+패드=기기 이동</div>
+
+<!-- 이동/회전 패드 -->
+<div id="pad">
+  <button id="up">▲</button>
+  <button id="right">►</button>
+  <button id="left">◄</button>
+  <button id="down">▼</button>
+  <button id="rotL">⟲</button>
+  <button id="rotR">⟳</button>
+  <button id="padInfo" class="wide">이동</button>
+  <button id="padInfo2" class="wide">회전</button>
+</div>
+<div id="padRow2">
+  <button id="stepMinus" class="btn">이동스텝 -</button>
+  <span id="stepLabel">5cm</span>
+  <button id="stepPlus"  class="btn">이동스텝 +</button>
+  <button id="rotStepMinus" class="btn">회전스텝 -</button>
+  <span id="rotStepLabel">15°</span>
+  <button id="rotStepPlus"  class="btn">회전스텝 +</button>
+</div>
+
+<button id="fab" class="num" data-n="1">AR 시작</button>
+<button id="capBtn" class="num disabled" data-n="2">캡처</button>
+<div id="toast">이미지 저장됨</div>
+
+<script type="module">
+import * as THREE from 'https://unpkg.com/three@0.160.0/build/three.module.js';
+import { ARButton } from 'https://unpkg.com/three@0.160.0/examples/jsm/webxr/ARButton.js';
+
+/* ---------- 기본 세팅 ---------- */
+const renderer = new THREE.WebGLRenderer({antialias:true, alpha:true, preserveDrawingBuffer:true});
+renderer.setPixelRatio(window.devicePixelRatio);
+renderer.setSize(window.innerWidth, window.innerHeight);
+renderer.xr.enabled = true;
+document.body.appendChild(renderer.domElement);
+
+const scene = new THREE.Scene();
+const camera = new THREE.PerspectiveCamera();
+scene.add(new THREE.HemisphereLight(0xffffff,0x333333,1.2));
+const dir = new THREE.DirectionalLight(0xffffff,0.9); dir.position.set(0.5,1,0.3); scene.add(dir);
+
+/* ---------- 상태 ---------- */
+let placed=[], mode='wall', selectedObj=null;
+let scalePct=1.0, raiseMM=0;
+let isTwoFinger=false, pinchStartDist=0, pinchStartScale=1.0, twistStartAngle=0, twistStartYaw=0;
+let stepMeters=0.05, rotStepRad=THREE.MathUtils.degToRad(15);
+
+/* ---------- 재질/텍스처 ---------- */
+const loader = new THREE.TextureLoader();
+let bodyMat = new THREE.MeshStandardMaterial({color:0x111111, roughness:0.6, metalness:0.35});
+let screenTex = loader.load('https://picsum.photos/800/450?blur=0'); screenTex.colorSpace=THREE.SRGBColorSpace;
+const newScreenMat = ()=> new THREE.MeshStandardMaterial({map:screenTex, roughness:0.45, metalness:0.0, emissive:0x111111, emissiveIntensity:0.35});
+const screenMatOf = g => g.userData.screenMesh?.material || null;
+
+/* ---------- 모델(실측) ---------- */
+function makeWall(){
+  const k=scalePct, W=1.23*k, H=0.69*k, D=0.05*k;
+  const g=new THREE.Group();
+  const body=new THREE.Mesh(new THREE.BoxGeometry(W,H,D), bodyMat); body.position.y=H/2; g.add(body);
+  const scr=new THREE.Mesh(new THREE.PlaneGeometry(1.205*k,0.678*k), newScreenMat());
+  scr.position.set(0,H/2,D/2+0.002); g.add(scr);
+  g.userData.screenMesh=scr; g.userData.type='wall'; return g;
+}
+function makeTotem(){
+  const k=scalePct, W=0.74*k, H=1.90*k, D=0.12*k, baseDepth=0.4976*k, baseThick=0.05*k, baseW=W*1.15;
+  const g=new THREE.Group();
+  const base=new THREE.Mesh(new THREE.BoxGeometry(baseW,baseThick,baseDepth), bodyMat); base.position.y=baseThick/2; g.add(base);
+  const body=new THREE.Mesh(new THREE.BoxGeometry(W,H,D), bodyMat); body.position.y=baseThick+H/2; g.add(body);
+  const scr=new THREE.Mesh(new THREE.PlaneGeometry(W*0.88, H*0.72), newScreenMat());
+  scr.position.set(0, baseThick+H*0.54, D/2+0.002); g.add(scr);
+  g.userData.screenMesh=scr; g.userData.type='totem'; return g;
+}
+
+/* ---------- UI ---------- */
+const $=id=>document.getElementById(id);
+const setActive=(on,offs)=>{$(on).classList.add('active'); offs.forEach(i=>$(i).classList.remove('active'));};
+$('btnModeWall').onclick=()=>{mode='wall';setActive('btnModeWall',['btnModeTotem']);};
+$('btnModeTotem').onclick=()=>{mode='totem';setActive('btnModeTotem',['btnModeWall']);};
+$('btnBlack').onclick=()=>{bodyMat.color.set(0x111111);setActive('btnBlack',['btnWhite']);};
+$('btnWhite').onclick=()=>{bodyMat.color.set(0xf2f2f2);setActive('btnWhite',['btnBlack']);};
+const lockScale=$('lockScale'), scaleRange=$('scaleRange'), scaleVal=$('scaleVal');
+function applyScaleLock(){ if(lockScale.checked){scalePct=1.0;scaleRange.value=100;scaleVal.textContent='100%';scaleRange.disabled=true;} else {scaleRange.disabled=false;} }
+lockScale.onchange=applyScaleLock; applyScaleLock();
+$('heightRange').oninput=()=>{raiseMM=parseInt($('heightRange').value,10);$('heightVal').textContent=raiseMM+'mm';
+  const t=selectedObj||placed[placed.length-1]; if(t){ const py=t.userData._planeY??0; t.position.y=py+(raiseMM/1000);} };
+scaleRange.oninput=()=>{scalePct=parseInt(scaleRange.value,10)/100;scaleVal.textContent=scaleRange.value+'%'; if(selectedObj) rebuildSelected();};
+$('clearAll').onclick=()=>{placed.forEach(o=>scene.remove(o)); placed.length=0; selectedObj=null; showPads(false); setCapEnabled(false); };
+
+/* ---------- 썸네일/업로드 ---------- */
+function addThumb(url,id,active=false){
+  const d=document.createElement('div'); d.className='thumb';
+  const img=document.createElement('img'); img.src=url; d.appendChild(img); d.dataset.tid=id;
+  d.onclick=()=>{ document.querySelectorAll('#tray .thumb').forEach(t=>t.classList.toggle('active',t===d));
+    const tex=loader.load(url); tex.colorSpace=THREE.SRGBColorSpace; screenTex=tex;
+    if(selectedObj && $('applySelected').checked){ const m=screenMatOf(selectedObj); if(m){m.map=tex; m.needsUpdate=true;} } };
+  $('thumbs').appendChild(d); if(active) d.click();
+}
+addThumb('https://picsum.photos/800/450?random=1','t1',true);
+addThumb('https://picsum.photos/800/450?random=2','t2',false);
+$('fileInput').onchange=(e)=>{ Array.from(e.target.files||[]).forEach((f,i)=> addThumb(URL.createObjectURL(f),'u'+i,i===0)); };
+
+/* ---------- 리티클(동심원 + 가시성 보조) ---------- */
+let focusLocked=false; let focusMatrix=null;
+const ringGroup = new THREE.Group(); ringGroup.visible=false; scene.add(ringGroup);
+
+// Base (cyan) and focus (green) materials
+const MAT_CYAN_FILL = new THREE.MeshBasicMaterial({color:0x4fc3ff,transparent:true,opacity:0.12});
+const MAT_CYAN_EDGE = new THREE.MeshBasicMaterial({color:0x4fc3ff,transparent:true,opacity:0.9});
+const MAT_CYAN_OUT  = new THREE.MeshBasicMaterial({color:0x4fc3ff,transparent:true,opacity:0.25});
+
+const MAT_GRN_FILL  = new THREE.MeshBasicMaterial({color:0x22cc66,transparent:true,opacity:0.16});
+const MAT_GRN_EDGE  = new THREE.MeshBasicMaterial({color:0x22cc66,transparent:true,opacity:1.0});
+const MAT_GRN_OUT   = new THREE.MeshBasicMaterial({color:0x22cc66,transparent:true,opacity:0.35});
+
+const innerR = 0.8;
+const midR   = 1.4;
+const outerR = 2.0;
+
+const ringFill = new THREE.Mesh(new THREE.CircleGeometry(innerR,96).rotateX(-Math.PI/2), MAT_CYAN_FILL);
+const ringEdge = new THREE.Mesh(new THREE.RingGeometry(innerR*0.94,innerR,96).rotateX(-Math.PI/2), MAT_CYAN_EDGE);
+const midEdge  = new THREE.Mesh(new THREE.RingGeometry(midR*0.97, midR,96).rotateX(-Math.PI/2), MAT_CYAN_OUT);
+const outerEdge= new THREE.Mesh(new THREE.RingGeometry(outerR*0.985, outerR,96).rotateX(-Math.PI/2), MAT_CYAN_OUT);
+[ringFill, ringEdge, midEdge, outerEdge].forEach(m=>{ m.userData.isRing=true; ringGroup.add(m); });
+
+// Tall visibility aids
+const poleMatCyan = new THREE.MeshBasicMaterial({color:0x4fc3ff, transparent:true, opacity:0.7});
+const poleMatGrn  = new THREE.MeshBasicMaterial({color:0x22cc66, transparent:true, opacity:0.95});
+const poleGeo = new THREE.CylinderGeometry(0.008,0.008,1.8,20);
+const pole = new THREE.Mesh(poleGeo, poleMatCyan);
+pole.position.y = 0.9;
+const tip = new THREE.Mesh(new THREE.SphereGeometry(0.04,24,24), poleMatCyan);
+tip.position.y = 1.8;
+ringGroup.add(pole); ringGroup.add(tip);
+
+function setRingColorFocused(focused){
+  const fill = focused ? MAT_GRN_FILL : MAT_CYAN_FILL;
+  const edge = focused ? MAT_GRN_EDGE : MAT_CYAN_EDGE;
+  const outm = focused ? MAT_GRN_OUT  : MAT_CYAN_OUT;
+  ringFill.material = fill;
+  ringEdge.material = edge;
+  midEdge.material  = outm;
+  outerEdge.material= outm;
+  pole.material = focused ? poleMatGrn : poleMatCyan;
+  tip.material  = focused ? poleMatGrn  : poleMatCyan;
+}
+
+/* ---------- XR Hit-test ---------- */
+let hitSource=null, transientSource=null, requested=false;
+let lastXRMatrix=null, lastXRValid=false;
+
+renderer.setAnimationLoop((_,frame)=>{
+  if(frame){
+    const ref=renderer.xr.getReferenceSpace();
+    const session=renderer.xr.getSession();
+    if(!requested && session){
+      session.requestReferenceSpace('viewer').then(view=>{
+        session.requestHitTestSource({space:view}).then(src=>hitSource=src);
+      });
+      session.requestHitTestSourceForTransientInput({profile:'generic-touchscreen'})
+             .then(src=>transientSource=src).catch(()=>{});
+      session.addEventListener('end',()=>{ requested=false; hitSource=null; transientSource=null; focusLocked=false; focusMatrix=null; setRingColorFocused(false); });
+      requested=true;
+    }
+    if(hitSource && !focusLocked){
+      const hits=frame.getHitTestResults(hitSource);
+      if(hits.length){
+        const pose=hits[0].getPose(ref);
+        lastXRMatrix = pose.transform.matrix; lastXRValid = true;
+        ringGroup.visible=true;
+        const m=new THREE.Matrix4().fromArray(lastXRMatrix);
+        ringGroup.position.setFromMatrixPosition(m);
+        ringGroup.quaternion.setFromRotationMatrix(m);
+      }else{ ringGroup.visible=false; lastXRValid=false; }
+    }else if(focusLocked && focusMatrix){
+      ringGroup.visible=true;
+      const m=new THREE.Matrix4().fromArray(focusMatrix);
+      ringGroup.position.setFromMatrixPosition(m);
+      ringGroup.quaternion.setFromRotationMatrix(m);
+    }
+
+    if(ringGroup.visible){
+      const dist = camera.position.distanceTo(ringGroup.position);
+      const s = Math.min(3.0, Math.max(1.0, dist * 0.6));
+      ringGroup.scale.setScalar(s);
+    }
+
+    if(selectedObj && isTwoFinger && transientSource){
+      const thits = frame.getHitTestResultsForTransientInput(transientSource);
+      if(thits.length){
+        const results=thits[0].results;
+        if(results && results.length){
+          const pose = results[0].getPose(ref);
+          const planeY = selectedObj.userData._planeY ?? pose.transform.position.y;
+          selectedObj.position.set(pose.transform.position.x, planeY + (raiseMM/1000), pose.transform.position.z);
+        }
+      }
+    }
+  }
+  renderer.render(scene,camera);
+});
+
+/* ---------- 배치/선택/제스처 ---------- */
+function rebuildSelected(){
+  if(!selectedObj) return;
+  const t=selectedObj.userData.type||'wall';
+  const pos=selectedObj.position.clone(), quat=selectedObj.quaternion.clone(), py=selectedObj.userData._planeY??0;
+  scene.remove(selectedObj);
+  const g=(t==='wall')?makeWall():makeTotem();
+  g.position.copy(pos); g.quaternion.copy(quat); g.position.y=py+(raiseMM/1000); g.userData._planeY=py; scene.add(g);
+  const i=placed.indexOf(selectedObj); if(i>=0) placed[i]=g; selectedObj=g;
+}
+function addAtMatrix(mtx){
+  const g=(mode==='wall')?makeWall():makeTotem();
+  const m=new THREE.Matrix4().fromArray(mtx);
+  const p=new THREE.Vector3().setFromMatrixPosition(m), q=new THREE.Quaternion().setFromRotationMatrix(m);
+  g.position.set(p.x, p.y + (raiseMM/1000), p.z); g.quaternion.copy(q); g.userData._planeY=p.y;
+  scene.add(g); placed.push(g); showPads(true);
+  selectedObj=g;
+  setCapEnabled(true);
+  if($('autoCap').checked){ setTimeout(()=>doCapture(), 250); }
+}
+
+/* ---- Raycaster: 탭 선택 & 링 탭 포커스 ---- */
+const raycaster = new THREE.Raycaster();
+const tapMaxMs = 220, tapMaxMove = 10;
+const cvs=renderer.domElement; const PICK=2.5;
+function rayPick(clientX, clientY, pool){
+  const x = (clientX / window.innerWidth) * 2 - 1;
+  const y = -(clientY / window.innerHeight) * 2 + 1;
+  raycaster.setFromCamera({x,y}, camera);
+  return raycaster.intersectObjects(pool, true);
+}
+
+let isDown=false, downXY=[0,0], downT=0;
+cvs.addEventListener('touchstart',ev=>{
+  isDown=true; downT=performance.now();
+  const t=ev.touches[0]; downXY=[t.clientX,t.clientY];
+  if(ev.touches.length===2){
+    isTwoFinger=true;
+    const a=ev.touches[0], b=ev.touches[1];
+    pinchStartDist=Math.hypot(a.clientX-b.clientX,a.clientY-b.clientY);
+    pinchStartScale=scalePct;
+    twistStartAngle=Math.atan2(b.clientY-a.clientY,b.clientX-a.clientX);
+    twistStartYaw=selectedObj?selectedObj.rotation.y:0;
+    if(!selectedObj && placed.length){
+      let min=1e9,pick=null; placed.forEach(o=>{const d=camera.position.distanceTo(o.position); if(d<min){min=d; pick=o;}});
+      if(pick && min<PICK){ selectedObj=pick; showPads(true); }
+    }
+  }
+},{passive:true});
+
+cvs.addEventListener('touchmove',ev=>{
+  if(!isTwoFinger||ev.touches.length!==2) return;
+  const a=ev.touches[0], b=ev.touches[1];
+  const curDist=Math.hypot(a.clientX-b.clientX,a.clientY-b.clientY);
+  const curAng =Math.atan2(b.clientY-a.clientY,b.clientX-a.clientX);
+  let s=pinchStartScale*(curDist/pinchStartDist);
+  s=Math.max(0.5,Math.min(1.5,s));
+  if(!lockScale.checked){ scalePct=s; if(selectedObj) rebuildSelected(); }
+  if(selectedObj){ selectedObj.rotation.y = twistStartYaw + (curAng - twistStartAngle); }
+},{passive:true});
+
+cvs.addEventListener('touchend',ev=>{
+  const now = performance.now();
+  const dt = now - downT;
+  const ct = ev.changedTouches[0];
+  const moved = Math.hypot(ct.clientX - downXY[0], ct.clientY - downXY[1]);
+  if(isDown && dt<=tapMaxMs && moved<=tapMaxMove){
+    const ringHits = rayPick(ct.clientX, ct.clientY, [ringFill, ringEdge, midEdge, outerEdge, pole, tip]);
+    if(ringHits.length && (lastXRValid || focusLocked)){
+      if(!focusLocked){
+        focusLocked=true;
+        setRingColorFocused(true);
+        focusMatrix = lastXRValid ? lastXRMatrix : focusMatrix;
+        showToast('포커스 고정');
+      }else{
+        focusLocked=false;
+        setRingColorFocused(false);
+        showToast('포커스 해제');
+      }
+    }else{
+      const meshes=[]; placed.forEach(g=>g.traverse(o=>{ if(o.isMesh) meshes.push(o); }));
+      const hits = rayPick(ct.clientX, ct.clientY, meshes);
+      if(hits.length){
+        let p=hits[0].object; while(p && !placed.includes(p)) p=p.parent;
+        if(p){ selectedObj=p; showPads(true); }
+      }else{
+        const mat = focusLocked && focusMatrix ? focusMatrix : lastXRMatrix;
+        if(mat) addAtMatrix(mat);
+      }
+    }
+  }
+  isTwoFinger=false; isDown=false;
+},{passive:true});
+
+/* ---------- 포커스 이동/회전 보정 ---------- */
+function offsetFocus(dx, dz){
+  if(!focusLocked || !focusMatrix) return;
+  const m = new THREE.Matrix4().fromArray(focusMatrix);
+  const e = m.elements;
+  const pos = new THREE.Vector3(e[12], e[13], e[14]);
+  const xAxis = new THREE.Vector3(e[0], e[1], e[2]).normalize();
+  const zAxis = new THREE.Vector3(e[8], e[9], e[10]).normalize();
+  pos.addScaledVector(xAxis, dx).addScaledVector(zAxis, dz);
+  m.elements[12] = pos.x; m.elements[13] = pos.y; m.elements[14] = pos.z;
+  focusMatrix = m.elements.slice();
+}
+function rotateFocus(rad){
+  if(!focusLocked || !focusMatrix) return;
+  const m = new THREE.Matrix4().fromArray(focusMatrix);
+  const pos = new THREE.Vector3().setFromMatrixPosition(m);
+  m.setPosition(0,0,0);
+  const rot = new THREE.Matrix4().makeRotationY(rad);
+  m.multiply(rot);
+  m.setPosition(pos);
+  focusMatrix = m.elements.slice();
+}
+
+/* ---------- 이동/회전 패드 ---------- */
+function showPads(on){ $('pad').style.display=on?'grid':'none'; $('padRow2').style.display=on?'flex':'none'; }
+function nudge(dx,dz){
+  if(selectedObj){
+    const py=selectedObj.userData._planeY??selectedObj.position.y;
+    selectedObj.position.x+=dx; selectedObj.position.z+=dz; selectedObj.position.y=py+(raiseMM/1000);
+  }else if(focusLocked && focusMatrix){
+    offsetFocus(dx, dz);
+  }
+}
+function rotateBy(rad){
+  if(selectedObj){
+    selectedObj.rotation.y+=rad;
+  }else if(focusLocked && focusMatrix){
+    rotateFocus(rad);
+  }
+}
+function hold(btn,fn){ let t=null; const start=()=>{fn(); t=setInterval(fn,120);}, stop=()=>{if(t){clearInterval(t);t=null;}}; btn.addEventListener('touchstart',start,{passive:true}); btn.addEventListener('mousedown',start); ['touchend','touchcancel','mouseup','mouseleave'].forEach(e=>btn.addEventListener(e,stop)); }
+hold($('up'),()=>nudge(0,-stepMeters));
+hold($('down'),()=>nudge(0, stepMeters));
+hold($('left'),()=>nudge(-stepMeters,0));
+hold($('right'),()=>nudge( stepMeters,0));
+hold($('rotL'),()=>rotateBy(-rotStepRad));
+hold($('rotR'),()=>rotateBy( rotStepRad));
+$('stepMinus').onclick=()=>{ stepMeters=Math.max(0.01,stepMeters-0.01); $('stepLabel').textContent=Math.round(stepMeters*100)+'cm'; };
+$('stepPlus').onclick =()=>{ stepMeters=Math.min(0.50,stepMeters+0.01); $('stepLabel').textContent=Math.round(stepMeters*100)+'cm'; };
+$('rotStepMinus').onclick=()=>{ rotStepRad=THREE.MathUtils.degToRad(Math.max(1, THREE.MathUtils.radToDeg(rotStepRad)-1)); $('rotStepLabel').textContent=Math.round(THREE.MathUtils.radToDeg(rotStepRad))+'°'; };
+$('rotStepPlus').onclick =()=>{ rotStepRad=THREE.MathUtils.degToRad(Math.min(45, THREE.MathUtils.radToDeg(rotStepRad)+1)); $('rotStepLabel').textContent=Math.round(THREE.MathUtils.radToDeg(rotStepRad))+'°'; };
+
+/* ---------- 캡처 제어 ---------- */
+const toast = document.getElementById('toast'); const capBtn = document.getElementById('capBtn');
+function showToast(msg='이미지 저장됨'){ toast.textContent = msg; toast.style.display = 'block'; setTimeout(()=> toast.style.display='none', 1000); }
+function timestamp(){ const d=new Date(); const p=n=>String(n).padStart(2,'0'); return d.getFullYear()+''+p(d.getMonth()+1)+p(d.getDate())+'_'+p(d.getHours())+p(d.getMinutes())+p(d.getSeconds()); }
+function hideUI(hide){ ['uiTop','tray','pad','padRow2','fab','capBtn','capStrip','autoRow','hint'].forEach(id=>{ const el=document.getElementById(id); if(el){ el.style.visibility = hide ? 'hidden' : 'visible'; } }); }
+function addCapThumb(dataUrl){ const img = new Image(); img.src = dataUrl; document.getElementById('capStrip').prepend(img); }
+function setCapEnabled(on){ capBtn.classList.toggle('disabled', !on); }
+async function doCapture(){
+  if(!renderer.xr.isPresenting){ showToast('AR 세션 아님'); return; }
+  if(!placed.length){ showToast('배치 후 캡처 가능'); return; }
+  hideUI(true);
+  await new Promise(requestAnimationFrame);
+  try{
+    const dataUrl = renderer.domElement.toDataURL('image/png');
+    const a=document.createElement('a');
+    a.href=dataUrl; a.download='DID_AR_'+timestamp()+'.png';
+    document.body.appendChild(a); a.click(); a.remove();
+    addCapThumb(dataUrl);
+    if(navigator.canShare && navigator.canShare()){
+      const res = await fetch(dataUrl); const blob = await res.blob();
+      const file = new File([blob], 'DID_AR_'+timestamp()+'.png', {type:'image/png'});
+      try{ await navigator.share({ files:[file], title:'DID AR Capture' }); }catch(_){}
+    }
+    showToast('이미지 저장됨');
+  }catch(e){ showToast('캡처 실패: '+e.message); }
+  finally{ hideUI(false); }
+}
+capBtn.addEventListener('click',()=>{ if(capBtn.classList.contains('disabled')){ showToast('배치 후 캡처 가능'); } else { doCapture(); } });
+
+/* ---------- 시작 버튼 ---------- */
+const fab=document.getElementById('fab'); let arBtn=null;
+fab.onclick=()=>{
+  if(!('xr' in navigator) || !self.isSecureContext){ alert('이 환경은 WebXR AR을 지원하지 않을 수 있어. HTTPS/브라우저 확인!'); return; }
+  if(!arBtn){
+    arBtn = ARButton.createButton(renderer, { requiredFeatures:['hit-test'] });
+    arBtn.style.display='none';
+    document.body.appendChild(arBtn);
+  }
+  try{ arBtn.click(); }catch(e){}
+};
+
+/* ---------- 리사이즈 ---------- */
+window.addEventListener('resize',()=>{ renderer.setSize(window.innerWidth, window.innerHeight); });
+
+</script>
+</body>
+</html>
