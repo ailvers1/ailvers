@@ -750,7 +750,7 @@ function loadModel(product) {
 function prepareProductScale(model, product) {
   const box = new THREE.Box3().setFromObject(model);
   const size = box.getSize(new THREE.Vector3());
-  const currentHeight = Math.max(size.x, size.y, size.z, 0.0001);
+  const currentHeight = getScaleBasis(size, product.scaleBasisAxis);
   const targetHeight = Number(product.height) || currentHeight;
   const baseScale = targetHeight / currentHeight;
 
@@ -761,6 +761,14 @@ function prepareProductScale(model, product) {
     height: targetHeight,
     depth: Number(product.depth) || size.z * baseScale
   };
+}
+
+function getScaleBasis(size, axis) {
+  if (axis === "x") return Math.max(size.x, 0.0001);
+  if (axis === "y") return Math.max(size.y, 0.0001);
+  if (axis === "z") return Math.max(size.z, 0.0001);
+
+  return Math.max(size.x, size.y, size.z, 0.0001);
 }
 
 function applyUserScale(model, userScale = 1) {
