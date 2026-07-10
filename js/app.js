@@ -617,7 +617,11 @@ async function placeCurrentProduct() {
     placedObjects.push(model);
     selectObject(model);
     recordHistory(before);
-    showCapturePrompt();
+    uiFolded = true;
+    updateUiFoldState();
+    if (!uiFolded) {
+      showCapturePrompt();
+    }
 
     showToast(`${currentProduct.name} 배치 완료. 화면저장을 눌러 촬영하세요.`);
   } catch (err) {
@@ -657,6 +661,8 @@ async function placePreviewProduct() {
     framePhotoPreviewCamera(model);
     selectObject(model);
     recordHistory(before);
+    uiFolded = true;
+    updateUiFoldState();
   } catch (err) {
     console.error(err);
     showToast("3D 미리보기 로드 실패");
@@ -1173,6 +1179,7 @@ function toggleUiFold() {
 
 function updateUiFoldState() {
   dom.topBar?.classList.toggle("folded", uiFolded);
+  document.body.classList.toggle("ui-clean", uiFolded);
 
   if (dom.uiFoldBtn) {
     dom.uiFoldBtn.textContent = uiFolded ? "화면 펼치기" : "화면 접기";
