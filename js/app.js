@@ -21,6 +21,7 @@ const dom = {
   lockScale: $("lockScale"),
   scaleRange: $("scaleRange"),
   scaleValue: $("scaleValue"),
+  dimensionToggle: $("dimensionToggle"),
   reticle: $("reticle"),
   editPanel: $("editPanel"),
   editHeader: $("editHeader"),
@@ -62,6 +63,7 @@ let photoPreviewObjectUrl = null;
 let products = [];
 let currentProduct = null;
 let selectedObject = null;
+let dimensionGroup = null;
 let placedObjects = [];
 let historyStack = [];
 let redoStack = [];
@@ -78,6 +80,7 @@ const textureCache = new Map();
 const TEXTURE_SWAP_MS = 3000;
 const TEXTURE_FADE_MS = 320;
 const CAPTURE_HINT_MS = 4200;
+const DIMENSION_COLOR = 0x38bdf8;
 let captureHintTimer = null;
 const AI_KIOSK_TEXTURES = {
   screenMeshNames: new Set([
@@ -255,6 +258,14 @@ function bindEvents() {
   if (dom.lockScale && dom.scaleRange) {
     dom.lockScale.addEventListener("change", () => {
       dom.scaleRange.disabled = dom.lockScale.checked;
+
+      if (selectedObject) {
+        const before = snapshotScene();
+        const userScale = dom.lockScale.checked ? 1 : Number(dom.scaleRange.value) / 100;
+        applyUserScale(selectedObject, userScale);
+        updateDimensionOverlay();
+        recordHistory(before);
+      }
     });
   }
 
@@ -264,11 +275,13 @@ function bindEvents() {
       dom.scaleValue.textContent = `${pct}%`;
 
       if (selectedObject && !dom.lockScale.checked) {
-        const s = pct / 100;
-        selectedObject.scale.setScalar(s);
+        applyUserScale(selectedObject, pct / 100);
+        updateDimensionOverlay();
       }
     });
   }
+
+  dom.dimensionToggle?.addEventListener("change", updateDimensionOverlay);
 
   renderer.domElement.addEventListener("pointerdown", selectByPointer);
   renderer.domElement.addEventListener("pointerdown", onPhotoPreviewPointerDown);
@@ -584,10 +597,7 @@ async function placeCurrentProduct() {
       model.rotation.y += THREE.MathUtils.degToRad(currentProduct.rotationYDeg);
     }
 
-    if (!dom.lockScale.checked) {
-      const s = Number(dom.scaleRange.value) / 100;
-      model.scale.setScalar(s);
-    }
+    applyUserScale(model, dom.lockScale.checked ? 1 : Number(dom.scaleRange.value) / 100);
 
     model.userData.productId = currentProduct.id;
     model.userData.productName = currentProduct.name;
@@ -626,10 +636,7 @@ async function placePreviewProduct() {
       model.rotation.y += THREE.MathUtils.degToRad(currentProduct.rotationYDeg);
     }
 
-    if (!dom.lockScale.checked) {
-      const s = Number(dom.scaleRange.value) / 100;
-      model.scale.setScalar(s);
-    }
+    applyUserScale(model, dom.lockScale.checked ? 1 : Number(dom.scaleRange.value) / 100);
 
     model.userData.productId = currentProduct.id;
     model.userData.productName = currentProduct.name;
@@ -664,15 +671,12 @@ function framePhotoPreviewCamera(model) {
   const size = box.getSize(new THREE.Vector3());
   const center = box.getCenter(new THREE.Vector3());
   const maxSize = Math.max(size.x, size.y, size.z, 1);
-  const targetHeight = 1.95;
-  const scale = targetHeight / maxSize;
 
   model.position.sub(center);
   model.position.y -= 0.12;
-  model.scale.setScalar(scale);
   model.rotation.x = 0;
 
-  camera.position.set(0, 0.95, 4.2);
+  camera.position.set(0, 0.95, Math.max(4.2, maxSize * 2.2));
   camera.lookAt(0, 0.95, 0);
   camera.updateProjectionMatrix();
 }
@@ -695,6 +699,7 @@ function loadModel(product) {
   if (modelCache.has(product.id)) {
     const model = cloneModel(modelCache.get(product.id));
     safelyApplyProductTextures(product, model);
+    prepareProductScale(model, product);
     return Promise.resolve(model);
   }
 
@@ -722,12 +727,40 @@ function loadModel(product) {
         modelCache.set(product.id, root);
         const model = cloneModel(root);
         safelyApplyProductTextures(product, model);
+        prepareProductScale(model, product);
         resolve(model);
       },
       undefined,
       reject
     );
   });
+}
+
+function prepareProductScale(model, product) {
+  const box = new THREE.Box3().setFromObject(model);
+  const size = box.getSize(new THREE.Vector3());
+  const currentHeight = Math.max(size.x, size.y, size.z, 0.0001);
+  const targetHeight = Number(product.height) || currentHeight;
+  const baseScale = targetHeight / currentHeight;
+
+  model.userData.baseScale = baseScale;
+  model.userData.userScale = 1;
+  model.userData.dimensions = {
+    width: Number(product.width) || size.x * baseScale,
+    height: targetHeight,
+    depth: Number(product.depth) || size.z * baseScale
+  };
+}
+
+function applyUserScale(model, userScale = 1) {
+  const baseScale = model.userData.baseScale || 1;
+  const nextUserScale = THREE.MathUtils.clamp(userScale, 0.25, 3);
+  model.userData.userScale = nextUserScale;
+  model.scale.setScalar(baseScale * nextUserScale);
+}
+
+function getUserScale(model) {
+  return model?.userData?.userScale || 1;
 }
 
 function safelyApplyProductTextures(product, model) {
@@ -964,6 +997,7 @@ function updateDynamicTextures(timestamp = 0) {
 
 function selectObject(obj) {
   selectedObject = obj;
+  if (!obj) clearDimensionOverlay();
 
   if (!obj) {
     dom.editPanel.classList.remove("show");
@@ -976,9 +1010,10 @@ function selectObject(obj) {
   editPanelExpanded = false;
   updateEditPanelState();
 
-  const scalePct = Math.round(obj.scale.x * 100);
+  const scalePct = Math.round(getUserScale(obj) * 100);
   dom.scaleRange.value = scalePct;
   dom.scaleValue.textContent = `${scalePct}%`;
+  updateDimensionOverlay();
 }
 
 function onPhotoPreviewPointerDown(event) {
@@ -1022,13 +1057,15 @@ function onPhotoPreviewPointerMove(event) {
     );
 
     selectedObject.position.copy(previewGesture.position).add(delta);
-    selectedObject.scale.setScalar(nextScale);
+    applyUserScale(selectedObject, nextScale);
     selectedObject.rotation.z = previewGesture.rotationZ + current.angle - previewGesture.angle;
     syncScaleControl(nextScale);
+    updateDimensionOverlay();
   } else if (pointers.length === 1) {
     const dx = point.x - point.lastX;
     const dy = point.y - point.lastY;
     selectedObject.position.add(screenDeltaToWorld(dx, dy, selectedObject.position));
+    updateDimensionOverlay();
   }
 
   point.lastX = point.x;
@@ -1060,7 +1097,7 @@ function getPhotoPreviewGestureState() {
       type: "pinch",
       ...metrics,
       position: selectedObject.position.clone(),
-      scale: selectedObject.scale.x,
+      scale: getUserScale(selectedObject),
       rotationZ: selectedObject.rotation.z
     };
   }
@@ -1180,6 +1217,7 @@ function moveSelected(direction) {
   }
 
   selectedObject.position.add(delta);
+  updateDimensionOverlay();
   recordHistory(before);
 }
 
@@ -1192,6 +1230,7 @@ function rotateSelected(rad, silent = false) {
   }
 
   selectedObject.rotation.y += rad;
+  updateDimensionOverlay();
 }
 
 function heightSelected(dy) {
@@ -1202,7 +1241,161 @@ function heightSelected(dy) {
 
   const before = snapshotScene();
   selectedObject.position.y += dy;
+  updateDimensionOverlay();
   recordHistory(before);
+}
+
+function updateDimensionOverlay() {
+  clearDimensionOverlay();
+
+  if (!dom.dimensionToggle?.checked || !selectedObject) return;
+
+  const box = new THREE.Box3().setFromObject(selectedObject);
+  const size = box.getSize(new THREE.Vector3());
+  const min = box.min;
+  const max = box.max;
+  const pad = Math.max(Math.max(size.x, size.y, size.z) * 0.06, 0.045);
+  const y = min.y + pad * 0.35;
+  const dims = selectedObject.userData.dimensions || {};
+  const userScale = getUserScale(selectedObject);
+  const width = (dims.width || size.x) * userScale;
+  const height = (dims.height || size.y) * userScale;
+  const depth = (dims.depth || size.z) * userScale;
+
+  dimensionGroup = new THREE.Group();
+  dimensionGroup.name = "Dimension overlay";
+  dimensionGroup.renderOrder = 200;
+
+  const x0 = min.x;
+  const x1 = max.x;
+  const z0 = min.z;
+  const z1 = max.z;
+  const rightX = max.x + pad;
+  const frontZ = max.z + pad;
+
+  addDimensionLine(
+    new THREE.Vector3(x0, y, frontZ),
+    new THREE.Vector3(x1, y, frontZ),
+    formatMm(width),
+    new THREE.Vector3((x0 + x1) / 2, y + pad * 0.55, frontZ)
+  );
+  addDimensionLine(
+    new THREE.Vector3(rightX, min.y, z1),
+    new THREE.Vector3(rightX, max.y, z1),
+    formatMm(height),
+    new THREE.Vector3(rightX + pad * 0.55, (min.y + max.y) / 2, z1)
+  );
+  addDimensionLine(
+    new THREE.Vector3(rightX, y, z0),
+    new THREE.Vector3(rightX, y, z1),
+    formatMm(depth),
+    new THREE.Vector3(rightX + pad * 0.55, y + pad * 0.55, (z0 + z1) / 2)
+  );
+
+  scene.add(dimensionGroup);
+}
+
+function clearDimensionOverlay() {
+  if (!dimensionGroup) return;
+
+  scene.remove(dimensionGroup);
+  dimensionGroup.traverse((child) => {
+    child.geometry?.dispose?.();
+    child.material?.map?.dispose?.();
+    child.material?.dispose?.();
+  });
+  dimensionGroup = null;
+}
+
+function addDimensionLine(start, end, label, labelPosition) {
+  const material = new THREE.LineBasicMaterial({
+    color: DIMENSION_COLOR,
+    depthTest: false,
+    transparent: true,
+    opacity: 0.95
+  });
+  const geometry = new THREE.BufferGeometry().setFromPoints([start, end]);
+  const line = new THREE.Line(geometry, material);
+  line.renderOrder = 200;
+  dimensionGroup.add(line);
+
+  const tickSize = Math.max(start.distanceTo(end) * 0.025, 0.035);
+  addTick(start, end, tickSize);
+  addTick(end, start, tickSize);
+  dimensionGroup.add(createTextSprite(label, labelPosition));
+}
+
+function addTick(point, toward, size) {
+  const dir = toward.clone().sub(point).normalize();
+  const up = new THREE.Vector3(0, 1, 0);
+  const side = new THREE.Vector3().crossVectors(dir, up);
+  if (side.lengthSq() < 0.0001) side.set(1, 0, 0);
+  side.normalize().multiplyScalar(size);
+
+  const geometry = new THREE.BufferGeometry().setFromPoints([
+    point.clone().sub(side),
+    point.clone().add(side)
+  ]);
+  const line = new THREE.Line(
+    geometry,
+    new THREE.LineBasicMaterial({
+      color: DIMENSION_COLOR,
+      depthTest: false,
+      transparent: true,
+      opacity: 0.95
+    })
+  );
+  line.renderOrder = 200;
+  dimensionGroup.add(line);
+}
+
+function createTextSprite(text, position) {
+  const canvas = document.createElement("canvas");
+  canvas.width = 512;
+  canvas.height = 160;
+  const ctx = canvas.getContext("2d");
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  ctx.fillStyle = "rgba(0, 0, 0, 0.72)";
+  ctx.strokeStyle = "rgba(56, 189, 248, 0.95)";
+  ctx.lineWidth = 6;
+  roundRect(ctx, 18, 30, 476, 92, 28);
+  ctx.fill();
+  ctx.stroke();
+  ctx.fillStyle = "#e0f7ff";
+  ctx.font = "700 44px system-ui, sans-serif";
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+  ctx.fillText(text, 256, 78);
+
+  const texture = new THREE.CanvasTexture(canvas);
+  texture.colorSpace = THREE.SRGBColorSpace;
+  const sprite = new THREE.Sprite(new THREE.SpriteMaterial({
+    map: texture,
+    depthTest: false,
+    transparent: true
+  }));
+  sprite.position.copy(position);
+  sprite.scale.set(0.34, 0.106, 1);
+  sprite.renderOrder = 201;
+  return sprite;
+}
+
+function roundRect(ctx, x, y, width, height, radius) {
+  ctx.beginPath();
+  ctx.moveTo(x + radius, y);
+  ctx.lineTo(x + width - radius, y);
+  ctx.quadraticCurveTo(x + width, y, x + width, y + radius);
+  ctx.lineTo(x + width, y + height - radius);
+  ctx.quadraticCurveTo(x + width, y + height, x + width - radius, y + height);
+  ctx.lineTo(x + radius, y + height);
+  ctx.quadraticCurveTo(x, y + height, x, y + height - radius);
+  ctx.lineTo(x, y + radius);
+  ctx.quadraticCurveTo(x, y, x + radius, y);
+  ctx.closePath();
+}
+
+function formatMm(valueMeters) {
+  return `${Math.round(valueMeters * 1000)}mm`;
 }
 
 function clearAll() {
@@ -1223,6 +1416,8 @@ function clearAll() {
 }
 
 function clearPlacedObjects() {
+  clearDimensionOverlay();
+
   for (const obj of placedObjects) {
     scene.remove(obj);
   }
@@ -1302,6 +1497,7 @@ async function restoreScene(snapshot) {
       model.position.fromArray(item.position);
       model.quaternion.fromArray(item.quaternion);
       model.scale.fromArray(item.scale);
+      model.userData.userScale = model.scale.x / (model.userData.baseScale || 1);
       model.userData.productId = item.productId;
       model.userData.productName = item.productName || product.name;
 
