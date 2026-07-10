@@ -810,6 +810,7 @@ function applyPhotoKioskTextures(root) {
     if (isScreen) {
       child.geometry = child.geometry.clone();
       ensurePlanarUv(child.geometry, "yz");
+      flipUv(child.geometry, true, true);
       child.material = new THREE.MeshBasicMaterial({
         map: screenTextures[0],
         toneMapped: false,
@@ -905,6 +906,18 @@ function ensurePlanarUv(geometry, axes = "xy") {
   }
 
   geometry.setAttribute("uv", new THREE.Float32BufferAttribute(uv, 2));
+}
+
+function flipUv(geometry, flipU = false, flipV = false) {
+  const uv = geometry.getAttribute("uv");
+  if (!uv) return;
+
+  for (let i = 0; i < uv.count; i += 1) {
+    if (flipU) uv.setX(i, 1 - uv.getX(i));
+    if (flipV) uv.setY(i, 1 - uv.getY(i));
+  }
+
+  uv.needsUpdate = true;
 }
 
 function cloneModel(source) {
