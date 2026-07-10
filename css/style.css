@@ -232,6 +232,11 @@ button:disabled {
   background: rgba(14,165,233,.75);
 }
 
+#savePhotoBtn {
+  background: rgba(16,185,129,.78);
+  font-weight: 800;
+}
+
 #clearBtn {
   background: rgba(220,38,38,.75);
 }
