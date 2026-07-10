@@ -1,0 +1,109 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, user-scalable=no" />
+  <title>SYSMATE AR 제품 배치</title>
+  <link rel="stylesheet" href="css/style.css" />
+</head>
+<body>
+  <div id="photoPreviewBg"></div>
+  <input id="photoInput" type="file" accept="image/*" capture="environment" />
+  <div id="photoPreviewHint">
+    <span>사진 위에서 한 손가락 이동, 두 손가락 확대/회전</span>
+  </div>
+
+  <!-- 시작 화면 -->
+  <div id="startScreen">
+    <div class="startLogo">📱✨</div>
+    <h1>SYSMATE AR</h1>
+    <p>Android Chrome에서는 AR 배치를, 지원되지 않는 기기에서는 3D 미리보기를 사용하세요.</p>
+
+    <button id="startBtnBig">AR 시작</button>
+    <button id="previewBtnBig" class="secondary">3D 미리보기</button>
+
+    <div class="notice">
+      AR이 열리지 않으면 자동으로 기본 AR 뷰어 또는 3D 미리보기로 안내됩니다.<br />
+      권장 환경: Android Chrome / ARCore 지원 기기
+    </div>
+  </div>
+
+  <!-- 상단 컨트롤 -->
+  <div id="topBar">
+    <div class="row">
+      <label for="productSelect">제품 선택</label>
+      <select id="productSelect"></select>
+      <button id="loadBtn">모델 준비</button>
+    </div>
+
+    <div class="row">
+      <label>
+        <input type="checkbox" id="lockScale" checked />
+        실측 고정
+      </label>
+
+      <span>스케일</span>
+      <input id="scaleRange" type="range" min="50" max="150" value="100" disabled />
+      <span id="scaleValue">100%</span>
+    </div>
+
+    <div class="row">
+      <button id="placeBtn">📍 배치</button>
+      <button id="undoBtn">↶ 취소</button>
+      <button id="redoBtn">↷ 복구</button>
+      <button id="clearBtn">🗑️ 전체삭제</button>
+    </div>
+  </div>
+
+  <!-- 선택 제품 조작 패널 -->
+  <div id="editPanel">
+    <div id="editHeader">
+      <div id="editTitle">선택된 제품 없음</div>
+      <button id="editToggleBtn">조작</button>
+    </div>
+
+    <div id="editControls">
+      <div class="pad">
+        <button id="moveForward">▲</button>
+        <button id="moveLeft">◀</button>
+        <button id="moveRight">▶</button>
+        <button id="moveBack">▼</button>
+      </div>
+
+      <div class="row small">
+        <button id="rotateLeft">⟲ 회전</button>
+        <button id="rotateRight">회전 ⟳</button>
+      </div>
+
+      <div class="row small">
+        <button id="heightDown">높이 -</button>
+        <button id="heightUp">높이 +</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="reticle"></div>
+  <div id="toast"></div>
+  <div id="captureHint">
+    <span>캡처: 휴대폰 전원 버튼 + 볼륨 아래 버튼</span>
+  </div>
+  <div id="captureStrip"></div>
+
+  <div id="loadingOverlay">
+    <div class="loader"></div>
+    <div id="loadingText">모델 불러오는 중...</div>
+  </div>
+
+  <!-- 중요: importmap은 app.js보다 위에 있어야 함 -->
+  <script type="importmap">
+  {
+    "imports": {
+      "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+      "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+    }
+  }
+  </script>
+
+  <script type="module" src="js/app.js"></script>
+</body>
+</html>
