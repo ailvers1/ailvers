@@ -16,6 +16,7 @@ const dom = {
   productSelect: $("productSelect"),
   loadBtn: $("loadBtn"),
   placeBtn: $("placeBtn"),
+  savePhotoBtn: $("savePhotoBtn"),
   undoBtn: $("undoBtn"),
   redoBtn: $("redoBtn"),
   clearBtn: $("clearBtn"),
@@ -219,6 +220,7 @@ function bindEvents() {
   safeClick("placeBtn", () => {
     placeCurrentProduct();
   });
+  safeClick("savePhotoBtn", captureScreen);
 
   safeClick("undoBtn", undoLastAction);
   safeClick("redoBtn", redoLastAction);
@@ -1560,7 +1562,9 @@ async function captureScreen() {
   }
 
   try {
-    const url = renderer.domElement.toDataURL("image/png");
+    const url = photoPreviewMode && photoPreviewObjectUrl
+      ? await createPhotoCompositeDataUrl()
+      : renderer.domElement.toDataURL("image/png");
     const blob = dataUrlToBlob(url);
     const file = new File([blob], `sysmate-ar-${Date.now()}.png`, { type: "image/png" });
 
@@ -1623,6 +1627,38 @@ function dataUrlToBlob(dataUrl) {
   }
 
   return new Blob([bytes], { type: mime });
+}
+
+async function createPhotoCompositeDataUrl() {
+  const canvas = document.createElement("canvas");
+  const width = renderer.domElement.width;
+  const height = renderer.domElement.height;
+  canvas.width = width;
+  canvas.height = height;
+
+  const ctx = canvas.getContext("2d");
+  const bg = await loadImage(photoPreviewObjectUrl);
+  drawImageCover(ctx, bg, width, height);
+  ctx.drawImage(renderer.domElement, 0, 0, width, height);
+  return canvas.toDataURL("image/png");
+}
+
+function loadImage(src) {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.onload = () => resolve(img);
+    img.onerror = reject;
+    img.src = src;
+  });
+}
+
+function drawImageCover(ctx, img, width, height) {
+  const scale = Math.max(width / img.naturalWidth, height / img.naturalHeight);
+  const drawWidth = img.naturalWidth * scale;
+  const drawHeight = img.naturalHeight * scale;
+  const x = (width - drawWidth) / 2;
+  const y = (height - drawHeight) / 2;
+  ctx.drawImage(img, x, y, drawWidth, drawHeight);
 }
 
 function showCapturePrompt() {
