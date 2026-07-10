@@ -814,27 +814,6 @@ function applyAiKioskTextures(root) {
 function applyPhotoKioskTextures(root) {
   const screenTextures = PHOTO_KIOSK_TEXTURES.screenFiles.map(loadAppTexture);
 
-  root.traverse((child) => {
-    if (!child.isMesh) return;
-
-    const names = new Set([child.name, child.geometry?.name].filter(Boolean));
-    const isScreen = [...names].some((name) => PHOTO_KIOSK_TEXTURES.screenMeshNames.has(name));
-
-    if (isScreen) {
-      child.geometry = child.geometry.clone();
-      ensurePlanarUv(child.geometry, "zy");
-      child.material = new THREE.MeshBasicMaterial({
-        map: screenTextures[0],
-        toneMapped: false,
-        side: THREE.DoubleSide,
-        transparent: true,
-        opacity: 1
-      });
-      child.userData.screenTextures = screenTextures;
-      child.userData.textureSwapMs = TEXTURE_SWAP_MS;
-    }
-  });
-
   addPhotoKioskTextureOverlay(root, screenTextures);
 }
 
