@@ -153,6 +153,33 @@ input {
   display: flex;
 }
 
+#uiFoldBtn {
+  align-self: flex-end;
+  border-radius: 999px;
+  padding: 7px 12px;
+  background: rgba(14,165,233,.82);
+  font-weight: 800;
+}
+
+#topBar.folded {
+  left: auto;
+  right: 10px;
+  width: auto;
+  padding: 8px;
+  border-radius: 999px;
+  background: rgba(0,0,0,.54);
+  backdrop-filter: blur(12px);
+}
+
+#topBar.folded .row {
+  display: none;
+}
+
+#topBar.folded #uiFoldBtn {
+  align-self: center;
+  background: rgba(255,255,255,.16);
+}
+
 .row {
   display: flex;
   align-items: center;
