@@ -12,6 +12,7 @@ const dom = {
   photoInput: $("photoInput"),
   photoPreviewHint: $("photoPreviewHint"),
   topBar: $("topBar"),
+  uiFoldBtn: $("uiFoldBtn"),
   productSelect: $("productSelect"),
   loadBtn: $("loadBtn"),
   placeBtn: $("placeBtn"),
@@ -69,6 +70,7 @@ let historyStack = [];
 let redoStack = [];
 let isRestoringHistory = false;
 let editPanelExpanded = false;
+let uiFolded = false;
 const previewPointers = new Map();
 let previewGesture = null;
 
@@ -221,6 +223,7 @@ function bindEvents() {
   safeClick("undoBtn", undoLastAction);
   safeClick("redoBtn", redoLastAction);
   safeClick("editToggleBtn", toggleEditPanel);
+  safeClick("uiFoldBtn", toggleUiFold);
   safeClick("captureHintBtn", captureScreen);
 
   if (dom.editHeader) {
@@ -433,6 +436,8 @@ async function startAR() {
 
     previewMode = false;
     photoPreviewMode = false;
+    uiFolded = false;
+    updateUiFoldState();
     dom.photoPreviewBg?.classList.remove("show");
     dom.photoPreviewHint?.classList.remove("show");
     orbitControls.enabled = false;
@@ -448,6 +453,8 @@ async function startAR() {
       hitTestSource = null;
       reticleObject.visible = false;
       dom.reticle.style.display = "none";
+      uiFolded = false;
+      updateUiFoldState();
       dom.topBar.classList.remove("show");
       dom.startScreen.classList.remove("hidden");
     });
@@ -507,6 +514,8 @@ async function startPreview(message) {
   reticleObject.visible = false;
   previewGrid.visible = false;
   orbitControls.enabled = false;
+  uiFolded = false;
+  updateUiFoldState();
 
   dom.startScreen.classList.add("hidden");
   dom.topBar.classList.add("show");
@@ -1145,6 +1154,29 @@ function toggleEditPanel() {
 
   editPanelExpanded = !editPanelExpanded;
   updateEditPanelState();
+}
+
+function toggleUiFold() {
+  uiFolded = !uiFolded;
+  updateUiFoldState();
+}
+
+function updateUiFoldState() {
+  dom.topBar?.classList.toggle("folded", uiFolded);
+
+  if (dom.uiFoldBtn) {
+    dom.uiFoldBtn.textContent = uiFolded ? "화면 펼치기" : "화면 접기";
+    dom.uiFoldBtn.setAttribute("aria-expanded", String(!uiFolded));
+  }
+
+  if (uiFolded && dom.editPanel?.classList.contains("show")) {
+    editPanelExpanded = false;
+    updateEditPanelState();
+  }
+
+  if (uiFolded) {
+    hideCapturePrompt();
+  }
 }
 
 function updateEditPanelState() {
