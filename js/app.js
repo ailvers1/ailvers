@@ -98,11 +98,7 @@ const AI_KIOSK_TEXTURES = {
 const PHOTO_KIOSK_TEXTURES = {
   screenMeshNames: new Set([
     "Plane009",
-    "60_Plane009",
-    "Object008",
-    "61_Object008",
-    "Rectangle075",
-    "57_Rectangle075"
+    "60_Plane009"
   ]),
   screenFiles: [
     "textures/photo-kiosk-screen-start.jpg"
@@ -119,15 +115,6 @@ const AI_KIOSK_OVERLAYS = {
     center: new THREE.Vector3(0.3697, 1.1769, 0.006),
     width: 0.165,
     height: 0.356
-  }
-};
-
-const PHOTO_KIOSK_OVERLAYS = {
-  screen: {
-    center: new THREE.Vector3(0.181, 1.299, 0.158),
-    width: 0.46,
-    height: 0.818,
-    rotation: new THREE.Euler(0, 0, 0)
   }
 };
 
@@ -814,7 +801,26 @@ function applyAiKioskTextures(root) {
 function applyPhotoKioskTextures(root) {
   const screenTextures = PHOTO_KIOSK_TEXTURES.screenFiles.map(loadAppTexture);
 
-  addPhotoKioskTextureOverlay(root, screenTextures);
+  root.traverse((child) => {
+    if (!child.isMesh) return;
+
+    const names = new Set([child.name, child.geometry?.name].filter(Boolean));
+    const isScreen = [...names].some((name) => PHOTO_KIOSK_TEXTURES.screenMeshNames.has(name));
+
+    if (isScreen) {
+      child.geometry = child.geometry.clone();
+      ensurePlanarUv(child.geometry, "yz");
+      child.material = new THREE.MeshBasicMaterial({
+        map: screenTextures[0],
+        toneMapped: false,
+        side: THREE.DoubleSide,
+        transparent: true,
+        opacity: 1
+      });
+      child.userData.screenTextures = screenTextures;
+      child.userData.textureSwapMs = TEXTURE_SWAP_MS;
+    }
+  });
 }
 
 function addAiKioskTextureOverlays(root, screenTextures, speakerTexture) {
@@ -855,28 +861,6 @@ function addAiKioskTextureOverlays(root, screenTextures, speakerTexture) {
   speaker.rotation.y = Math.PI;
   speaker.renderOrder = 31;
   root.add(speaker);
-}
-
-function addPhotoKioskTextureOverlay(root, screenTextures) {
-  const screen = new THREE.Mesh(
-    new THREE.PlaneGeometry(PHOTO_KIOSK_OVERLAYS.screen.width, PHOTO_KIOSK_OVERLAYS.screen.height),
-    new THREE.MeshBasicMaterial({
-      map: screenTextures[0],
-      toneMapped: false,
-      side: THREE.DoubleSide,
-      depthTest: false,
-      depthWrite: false,
-      transparent: true,
-      opacity: 1
-    })
-  );
-  screen.name = "Photo kiosk visible screen texture";
-  screen.position.copy(PHOTO_KIOSK_OVERLAYS.screen.center);
-  screen.rotation.copy(PHOTO_KIOSK_OVERLAYS.screen.rotation);
-  screen.renderOrder = 80;
-  screen.userData.screenTextures = screenTextures;
-  screen.userData.textureSwapMs = TEXTURE_SWAP_MS;
-  root.add(screen);
 }
 
 function loadAppTexture(url) {
