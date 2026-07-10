@@ -529,7 +529,7 @@ async function startPreview(message) {
 
 function requestPhotoPreview() {
   if (!dom.photoInput) {
-    startPreview("사진 배경 미리보기 모드입니다.");
+    startPreview("사진 배경 3D 배치 모드입니다.");
     return;
   }
 
@@ -541,7 +541,7 @@ function handlePhotoPreviewFile(event) {
   const file = event.target.files?.[0];
 
   if (!file) {
-    showToast("사진을 선택하면 미리보기를 시작합니다.");
+    showToast("갤러리에서 사진을 선택하거나 새로 촬영해 주세요.");
     return;
   }
 
@@ -555,7 +555,7 @@ function handlePhotoPreviewFile(event) {
     dom.photoPreviewBg.style.backgroundImage = `url("${photoPreviewObjectUrl}")`;
   }
 
-  startPreview("사진 위에 제품을 올렸습니다.");
+  startPreview("선택한 사진 위에 제품을 올렸습니다.");
 }
 
 async function preloadCurrentProduct() {
