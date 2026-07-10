@@ -139,24 +139,14 @@ input {
 .startBrand {
   display: inline-flex;
   align-items: center;
-  gap: 10px;
-  color: #061e55;
-  font-size: 14px;
-  font-weight: 900;
-  letter-spacing: 0;
+  width: min(292px, 72vw);
 }
 
-.startMark {
-  display: inline-grid;
-  place-items: center;
-  width: 34px;
-  height: 34px;
-  border-radius: 8px;
-  background: #061e55;
-  color: #9dcd33;
-  font-size: 17px;
-  font-weight: 900;
-  box-shadow: 0 10px 24px rgba(6,30,85,.18);
+.startBrand img {
+  display: block;
+  width: 100%;
+  height: auto;
+  object-fit: contain;
 }
 
 .startCopy {
@@ -640,6 +630,10 @@ body.ui-clean #editPanel.collapsed {
     min-height: calc(100dvh - env(safe-area-inset-top, 0px) - 68px);
   }
 
+  .startBrand {
+    width: min(258px, 76vw);
+  }
+
   .startActions {
     align-items: stretch;
     flex-direction: column;
@@ -712,6 +706,10 @@ body.ui-clean #editPanel.collapsed {
   .startShell {
     width: min(680px, 100%);
     gap: 14px;
+  }
+
+  .startBrand {
+    width: 220px;
   }
 
   #startScreen h1 {
