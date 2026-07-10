@@ -124,10 +124,10 @@ const AI_KIOSK_OVERLAYS = {
 
 const PHOTO_KIOSK_OVERLAYS = {
   screen: {
-    center: new THREE.Vector3(0.181, 1.299, 0.152),
-    width: 0.534,
-    height: 0.945,
-    rotation: new THREE.Euler(0, Math.PI / 2, 0)
+    center: new THREE.Vector3(0.181, 1.299, 0.158),
+    width: 0.46,
+    height: 0.818,
+    rotation: new THREE.Euler(0, 0, 0)
   }
 };
 
@@ -864,7 +864,7 @@ function addPhotoKioskTextureOverlay(root, screenTextures) {
       map: screenTextures[0],
       toneMapped: false,
       side: THREE.DoubleSide,
-      depthTest: true,
+      depthTest: false,
       depthWrite: false,
       transparent: true,
       opacity: 1
@@ -873,7 +873,7 @@ function addPhotoKioskTextureOverlay(root, screenTextures) {
   screen.name = "Photo kiosk visible screen texture";
   screen.position.copy(PHOTO_KIOSK_OVERLAYS.screen.center);
   screen.rotation.copy(PHOTO_KIOSK_OVERLAYS.screen.rotation);
-  screen.renderOrder = 30;
+  screen.renderOrder = 80;
   screen.userData.screenTextures = screenTextures;
   screen.userData.textureSwapMs = TEXTURE_SWAP_MS;
   root.add(screen);
