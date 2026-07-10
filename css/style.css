@@ -85,12 +85,41 @@ input {
   z-index: 100;
   display: grid;
   place-items: center;
+  overflow: hidden;
   background:
-    linear-gradient(160deg, rgba(14,165,233,.12), transparent 38%),
-    linear-gradient(0deg, rgba(15,23,42,.04), rgba(15,23,42,.04)),
-    #f7f9fb;
-  color: #111827;
+    radial-gradient(circle at 8% 18%, rgba(255,255,255,.62), transparent 26%),
+    linear-gradient(135deg, #f3efe3, #e9e3d2);
+  color: #061e55;
   padding: clamp(22px, 6vw, 56px);
+}
+
+#startScreen::before,
+#startScreen::after {
+  content: "";
+  position: absolute;
+  pointer-events: none;
+}
+
+#startScreen::before {
+  right: clamp(-130px, -8vw, -52px);
+  top: clamp(42px, 10vw, 96px);
+  width: min(52vw, 520px);
+  height: min(68vh, 560px);
+  border-radius: 20px;
+  background: #245a94;
+  transform: rotate(8deg);
+  box-shadow: 0 24px 60px rgba(6,30,85,.18);
+}
+
+#startScreen::after {
+  right: clamp(-70px, 4vw, 52px);
+  top: clamp(108px, 18vw, 170px);
+  width: min(42vw, 440px);
+  height: min(62vh, 510px);
+  border-radius: 18px;
+  background: #9dcd33;
+  transform: rotate(-3deg);
+  box-shadow: 0 20px 42px rgba(88,115,23,.16);
 }
 
 #startScreen.hidden {
@@ -99,6 +128,8 @@ input {
 
 .startShell {
   width: min(520px, 100%);
+  position: relative;
+  z-index: 1;
   display: flex;
   flex-direction: column;
   align-items: flex-start;
@@ -109,7 +140,7 @@ input {
   display: inline-flex;
   align-items: center;
   gap: 10px;
-  color: #0f172a;
+  color: #061e55;
   font-size: 14px;
   font-weight: 900;
   letter-spacing: 0;
@@ -120,12 +151,12 @@ input {
   place-items: center;
   width: 34px;
   height: 34px;
-  border-radius: 10px;
-  background: #111827;
-  color: #f8fafc;
+  border-radius: 8px;
+  background: #061e55;
+  color: #9dcd33;
   font-size: 17px;
   font-weight: 900;
-  box-shadow: 0 10px 24px rgba(15,23,42,.18);
+  box-shadow: 0 10px 24px rgba(6,30,85,.18);
 }
 
 .startCopy {
@@ -135,7 +166,7 @@ input {
 }
 
 .startEyebrow {
-  color: #0284c7;
+  color: #245a94;
   font-size: 12px;
   font-weight: 900;
   letter-spacing: 0;
@@ -143,7 +174,7 @@ input {
 
 #startScreen h1 {
   margin: 0;
-  color: #0f172a;
+  color: #061e55;
   font-size: clamp(42px, 12vw, 74px);
   line-height: .95;
   font-weight: 900;
@@ -153,7 +184,7 @@ input {
 #startScreen p {
   max-width: 440px;
   margin: 0;
-  color: #475569;
+  color: rgba(6,30,85,.72);
   font-size: 16px;
   line-height: 1.55;
   font-weight: 650;
@@ -171,11 +202,11 @@ input {
   border: 0;
   border-radius: 12px;
   padding: 15px 30px;
-  background: #0ea5e9;
+  background: #061e55;
   color: white;
   font-size: 16px;
   font-weight: 800;
-  box-shadow: 0 16px 34px rgba(14,165,233,.28);
+  box-shadow: 0 16px 34px rgba(6,30,85,.24);
 }
 
 #previewBtnBig {
@@ -183,19 +214,19 @@ input {
 }
 
 #previewBtnBig.secondary {
-  border: 1px solid #cbd5e1;
+  border: 1px solid rgba(6,30,85,.16);
   border-radius: 12px;
   padding: 14px 20px;
-  background: rgba(255,255,255,.82);
-  color: #0f172a;
+  background: rgba(157,205,51,.96);
+  color: #061e55;
   font-size: 14px;
   font-weight: 700;
-  box-shadow: 0 12px 28px rgba(15,23,42,.08);
+  box-shadow: 0 12px 28px rgba(88,115,23,.14);
 }
 
 .notice {
   padding-top: 4px;
-  color: #64748b;
+  color: rgba(6,30,85,.58);
   font-size: 12px;
   line-height: 1.5;
   font-weight: 650;
@@ -588,8 +619,25 @@ body.ui-clean #editPanel.collapsed {
     padding-top: calc(env(safe-area-inset-top, 0px) + 34px);
   }
 
+  #startScreen::before {
+    right: -168px;
+    top: 92px;
+    width: 275px;
+    height: 390px;
+    opacity: .9;
+  }
+
+  #startScreen::after {
+    right: -118px;
+    top: 154px;
+    width: 245px;
+    height: 340px;
+    opacity: .92;
+  }
+
   .startShell {
     gap: 24px;
+    min-height: calc(100dvh - env(safe-area-inset-top, 0px) - 68px);
   }
 
   .startActions {
@@ -645,6 +693,20 @@ body.ui-clean #editPanel.collapsed {
   #startScreen {
     overflow-y: auto;
     padding: 18px 24px;
+  }
+
+  #startScreen::before {
+    right: -72px;
+    top: 20px;
+    width: 300px;
+    height: 240px;
+  }
+
+  #startScreen::after {
+    right: -32px;
+    top: 62px;
+    width: 250px;
+    height: 220px;
   }
 
   .startShell {
