@@ -38,6 +38,2454 @@ const dom = {
   loadingText: $("loadingText"),
   calibrationLayer: $("calibrationLayer"),
   calibrationSvg: $("calibrationSvg"),
+  calibrationPlane: $("calibrationPlane"),
+  calibrationLine: $("calibrationLine"),
+  calibrationPanel: $("calibrationPanel"),
+  calibrationBody: $("calibrationBody"),
+  calibrationToggleBtn: $("calibrationToggleBtn"),
+  calibrationSummary: $("calibrationSummary"),
+  calibrationPickBtn: $("calibrationPickBtn"),
+  calibrationRepickBtn: $("calibrationRepickBtn"),
+  calibrationLength: $("calibrationLength"),
+  calibrationUnit: $("calibrationUnit"),
+  calibrationApplyBtn: $("calibrationApplyBtn"),
+  calibrationResetBtn: $("calibrationResetBtn"),
+  calibrationReadout: $("calibrationReadout"),
+  calibrationFineTune: $("calibrationFineTune"),
+  calibrationFineTuneValue: $("calibrationFineTuneValue"),
+  calibrationRestoreBtn: $("calibrationRestoreBtn"),
+  calibrationGuide: $("calibrationGuide"),
+  wallWidth: $("wallWidth"),
+  wallHeight: $("wallHeight"),
+  wallPositionX: $("wallPositionX"),
+  wallPositionY: $("wallPositionY"),
+  wallPositionXValue: $("wallPositionXValue"),
+  wallPositionYValue: $("wallPositionYValue"),
+
+  moveForward: $("moveForward"),
+  moveBack: $("moveBack"),
+  moveLeft: $("moveLeft"),
+  moveRight: $("moveRight"),
+  rotateLeft: $("rotateLeft"),
+  rotateRight: $("rotateRight"),
+  tiltUp: $("tiltUp"),
+  tiltDown: $("tiltDown"),
+  heightUp: $("heightUp"),
+  heightDown: $("heightDown")
+};
+
+let renderer;
+let scene;
+let camera;
+let controller;
+let orbitControls;
+let reticleObject;
+let previewGrid;
+
+let hitTestSource = null;
+let hitTestSourceRequested = false;
+let arReferenceSpaceType = "local";
+let previewMode = false;
+let photoPreviewMode = false;
+let photoPreviewObjectUrl = null;
+
+let products = [];
+let currentProduct = null;
+let selectedObject = null;
+let dimensionGroup = null;
+let placedObjects = [];
+let historyStack = [];
+let redoStack = [];
+let isRestoringHistory = false;
+let editPanelExpanded = false;
+let uiFolded = false;
+const previewPointers = new Map();
+let previewGesture = null;
+const calibration = {
+  mode: "floor",
+  points: [],
+  isPicking: false,
+  draggingIndex: null,
+  applied: false,
+  referenceMeters: 0,
+  pixelLength: 0,
+  pixelsPerMeter: 0,
+  autoUserScale: 1,
+  fineTune: 1,
+  wallU: 0.5,
+  wallV: 0.5
+};
+
+const gltfLoader = new GLTFLoader();
+const textureLoader = new THREE.TextureLoader();
+const modelCache = new Map();
+const textureCache = new Map();
+
+const TEXTURE_SWAP_MS = 3000;
+const TEXTURE_FADE_MS = 320;
+const CAPTURE_HINT_MS = 4200;
+const DIMENSION_COLOR = 0x38bdf8;
+let captureHintTimer = null;
+const AI_KIOSK_TEXTURES = {
+  screenMeshNames: new Set([
+    "Object_5",
+    "151_Object_5",
+    "Object_6",
+    "152_Object_6",
+    "Object_7",
+    "153_Object_7"
+  ]),
+  speakerMeshNames: new Set(["Object", "0_Object"]),
+  screenFiles: [
+    "textures/ai-kiosk-screen-1.jpg"
+  ],
+  speakerFile: "textures/speaker-side-vertical.png"
+};
+
+const PHOTO_KIOSK_TEXTURES = {
+  screenMeshNames: new Set([
+    "Plane009",
+    "60_Plane009"
+  ]),
+  screenFiles: [
+    "textures/photo-kiosk-screen-start.jpg"
+  ]
+};
+
+const AI_KIOSK_OVERLAYS = {
+  screen: {
+    center: new THREE.Vector3(-0.1069, 1.265, -0.004),
+    width: 0.678,
+    height: 1.208
+  },
+  speaker: {
+    center: new THREE.Vector3(0.3697, 1.1769, 0.006),
+    width: 0.165,
+    height: 0.356
+  }
+};
+
+init();
+
+async function init() {
+  setupThree();
+  setupLights();
+  setupReticle();
+  setupPreviewHelpers();
+  bindEvents();
+  await loadManifest();
+  updateHistoryButtons();
+  animate();
+}
+
+function setupThree() {
+  renderer = new THREE.WebGLRenderer({
+    antialias: true,
+    alpha: true,
+    preserveDrawingBuffer: true
+  });
+
+  renderer.setPixelRatio(window.devicePixelRatio);
+  renderer.setSize(window.innerWidth, window.innerHeight);
+  renderer.xr.enabled = true;
+  renderer.xr.setReferenceSpaceType("local");
+  renderer.outputColorSpace = THREE.SRGBColorSpace;
+
+  document.body.appendChild(renderer.domElement);
+
+  scene = new THREE.Scene();
+  camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.01, 100);
+  camera.position.set(0, 1.35, 3);
+
+  orbitControls = new OrbitControls(camera, renderer.domElement);
+  orbitControls.enabled = false;
+  orbitControls.enableDamping = true;
+  orbitControls.target.set(0, 0.95, 0);
+  orbitControls.minDistance = 1.2;
+  orbitControls.maxDistance = 5;
+  orbitControls.maxPolarAngle = Math.PI * 0.48;
+
+  controller = renderer.xr.getController(0);
+  scene.add(controller);
+
+  window.addEventListener("resize", onResize);
+  window.addEventListener("orientationchange", () => {
+    setTimeout(onResize, 250);
+  });
+
+  window.visualViewport?.addEventListener("resize", onResize);
+}
+
+function setupLights() {
+  const hemi = new THREE.HemisphereLight(0xffffff, 0x444444, 1.35);
+  scene.add(hemi);
+
+  const dir = new THREE.DirectionalLight(0xffffff, 0.9);
+  dir.position.set(1, 2, 1);
+  scene.add(dir);
+}
+
+function setupReticle() {
+  reticleObject = new THREE.Mesh(
+    new THREE.RingGeometry(0.18, 0.22, 48).rotateX(-Math.PI / 2),
+    new THREE.MeshBasicMaterial({
+      color: 0x38bdf8,
+      transparent: true,
+      opacity: 0.9
+    })
+  );
+
+  reticleObject.matrixAutoUpdate = false;
+  reticleObject.visible = false;
+  scene.add(reticleObject);
+}
+
+function setupPreviewHelpers() {
+  previewGrid = new THREE.GridHelper(4, 20, 0x38bdf8, 0x334155);
+  previewGrid.material.transparent = true;
+  previewGrid.material.opacity = 0.35;
+  previewGrid.visible = false;
+  scene.add(previewGrid);
+}
+
+function bindEvents() {
+  safeClick("startBtnBig", startAR);
+  safeClick("previewBtnBig", () => {
+    requestPhotoPreview();
+  });
+
+  safeClick("loadBtn", async () => {
+    await preloadCurrentProduct();
+  });
+
+  safeClick("placeBtn", () => {
+    placeCurrentProduct();
+  });
+  safeClick("savePhotoBtn", captureScreen);
+
+  safeClick("undoBtn", undoLastAction);
+  safeClick("redoBtn", redoLastAction);
+  safeClick("editToggleBtn", toggleEditPanel);
+  safeClick("uiFoldBtn", toggleUiFold);
+  safeClick("captureHintBtn", captureScreen);
+
+  if (dom.editHeader) {
+    dom.editHeader.addEventListener("click", (event) => {
+      if (event.target === dom.editToggleBtn) return;
+      toggleEditPanel();
+    });
+  }
+
+  safeClick("clearBtn", clearAll);
+
+  safeClick("moveForward", () => moveSelected("forward"));
+  safeClick("moveBack", () => moveSelected("back"));
+  safeClick("moveLeft", () => moveSelected("left"));
+  safeClick("moveRight", () => moveSelected("right"));
+
+  bindHoldRotate("rotateLeft", 1, "y");
+  bindHoldRotate("rotateRight", -1, "y");
+  bindHoldRotate("tiltUp", -1, "x");
+  bindHoldRotate("tiltDown", 1, "x");
+
+  safeClick("heightUp", () => heightSelected(0.05));
+  safeClick("heightDown", () => heightSelected(-0.05));
+
+  if (dom.productSelect) {
+    dom.productSelect.addEventListener("change", () => {
+      const id = dom.productSelect.value;
+      currentProduct = products.find((p) => p.id === id) || null;
+      showToast(`${currentProduct?.name || "제품"} 선택됨`);
+
+      if (previewMode) {
+        placePreviewProduct();
+      }
+    });
+  }
+
+  if (dom.lockScale && dom.scaleRange) {
+    dom.lockScale.addEventListener("change", () => {
+      dom.scaleRange.disabled = dom.lockScale.checked;
+
+      if (selectedObject) {
+        const before = snapshotScene();
+        const userScale = dom.lockScale.checked ? 1 : Number(dom.scaleRange.value) / 100;
+        applyUserScale(selectedObject, userScale);
+        updateDimensionOverlay();
+        recordHistory(before);
+      }
+    });
+  }
+
+  if (dom.scaleRange) {
+    dom.scaleRange.addEventListener("input", () => {
+      const pct = Number(dom.scaleRange.value);
+      dom.scaleValue.textContent = `${pct}%`;
+
+      if (selectedObject && !dom.lockScale.checked) {
+        applyUserScale(selectedObject, pct / 100);
+        updateDimensionOverlay();
+      }
+    });
+  }
+
+  dom.dimensionToggle?.addEventListener("change", updateDimensionOverlay);
+
+  renderer.domElement.addEventListener("pointerdown", selectByPointer);
+  renderer.domElement.addEventListener("pointerdown", onPhotoPreviewPointerDown);
+  renderer.domElement.addEventListener("pointermove", onPhotoPreviewPointerMove);
+  renderer.domElement.addEventListener("pointerup", onPhotoPreviewPointerEnd);
+  renderer.domElement.addEventListener("pointercancel", onPhotoPreviewPointerEnd);
+
+  dom.photoInput?.addEventListener("change", handlePhotoPreviewFile);
+  bindCalibrationEvents();
+}
+
+function safeClick(id, handler) {
+  const el = document.getElementById(id);
+
+  if (!el) {
+    console.warn(`[버튼 없음] #${id}`);
+    return;
+  }
+
+  el.addEventListener("click", handler);
+}
+
+function bindCalibrationEvents() {
+  if (!dom.calibrationPanel || !dom.calibrationLayer) return;
+
+  safeClick("calibrationToggleBtn", () => {
+    const collapsed = dom.calibrationPanel.classList.toggle("collapsed");
+    dom.calibrationToggleBtn.textContent = collapsed ? "열기" : "접기";
+  });
+  safeClick("calibrationPickBtn", startCalibrationPicking);
+  safeClick("calibrationRepickBtn", startCalibrationPicking);
+  safeClick("calibrationApplyBtn", () => applyReferenceCalibration(true));
+  safeClick("calibrationResetBtn", () => resetCalibration(true));
+  safeClick("calibrationRestoreBtn", () => {
+    calibration.fineTune = 1;
+    dom.calibrationFineTune.value = "100";
+    dom.calibrationFineTuneValue.textContent = "100%";
+    applyReferenceCalibration(true);
+  });
+
+  dom.calibrationFineTune?.addEventListener("input", () => {
+    calibration.fineTune = Number(dom.calibrationFineTune.value) / 100;
+    dom.calibrationFineTuneValue.textContent = `${dom.calibrationFineTune.value}%`;
+
+    if (calibration.applied) {
+      applyReferenceCalibration(false, false);
+    }
+  });
+
+  document.querySelectorAll("[data-placement-mode]").forEach((button) => {
+    button.addEventListener("click", () => setPlacementMode(button.dataset.placementMode));
+  });
+
+  [dom.wallWidth, dom.wallHeight].forEach((input) => {
+    input?.addEventListener("input", () => {
+      refreshCalibrationReadout();
+      if (calibration.applied) applyReferenceCalibration(false, false);
+    });
+  });
+
+  dom.wallPositionX?.addEventListener("input", () => updateWallPositionFromControls());
+  dom.wallPositionY?.addEventListener("input", () => updateWallPositionFromControls());
+
+  document.querySelectorAll("[data-reference-cm]").forEach((button) => {
+    button.addEventListener("click", () => {
+      dom.calibrationLength.value = button.dataset.referenceCm;
+      dom.calibrationUnit.value = "cm";
+      refreshCalibrationReadout();
+    });
+  });
+
+  dom.calibrationLayer.addEventListener("pointerdown", onCalibrationPointerDown);
+  window.addEventListener("pointermove", onCalibrationPointerMove);
+  window.addEventListener("pointerup", onCalibrationPointerUp);
+  window.addEventListener("pointercancel", onCalibrationPointerUp);
+}
+
+function setPlacementMode(mode) {
+  calibration.mode = mode === "wall" ? "wall" : "floor";
+  document.body.classList.toggle("wall-placement-mode", calibration.mode === "wall");
+  document.querySelectorAll("[data-placement-mode]").forEach((button) => {
+    button.classList.toggle("selected", button.dataset.placementMode === calibration.mode);
+  });
+
+  if (dom.calibrationPickBtn) {
+    dom.calibrationPickBtn.textContent = calibration.mode === "wall" ? "벽면 네 점 선택" : "두 점 선택";
+  }
+  if (dom.calibrationGuide) {
+    dom.calibrationGuide.textContent = calibration.mode === "wall"
+      ? "제품을 설치할 벽면의 네 모서리와 실제 가로·세로를 지정해 주세요."
+      : "기준 물체는 제품 설치 위치와 같은 평면에서 선택해 주세요.";
+  }
+
+  resetCalibration(false, true);
+  updateWallPlacementControls();
+}
+
+function updateWallPositionFromControls() {
+  calibration.wallU = Number(dom.wallPositionX?.value || 50) / 100;
+  calibration.wallV = 1 - Number(dom.wallPositionY?.value || 50) / 100;
+  updateWallPlacementControls();
+  if (calibration.applied) applyReferenceCalibration(false, false);
+}
+
+function updateWallPlacementControls() {
+  const xPercent = Math.round(calibration.wallU * 100);
+  const heightPercent = Math.round((1 - calibration.wallV) * 100);
+  const wallSize = getWallSizeMeters();
+  if (dom.wallPositionX) dom.wallPositionX.value = String(xPercent);
+  if (dom.wallPositionY) dom.wallPositionY.value = String(heightPercent);
+  if (dom.wallPositionXValue) {
+    dom.wallPositionXValue.textContent = wallSize.width ? `${Math.round(calibration.wallU * wallSize.width * 100)} cm` : `${xPercent}%`;
+  }
+  if (dom.wallPositionYValue) {
+    dom.wallPositionYValue.textContent = wallSize.height ? `${Math.round((1 - calibration.wallV) * wallSize.height * 100)} cm` : `${heightPercent}%`;
+  }
+}
+
+function startCalibrationPicking() {
+  if (!photoPreviewMode) {
+    showToast("사진 배치 모드에서 기준 길이를 설정할 수 있습니다.");
+    return;
+  }
+
+  calibration.points = [];
+  calibration.isPicking = true;
+  calibration.draggingIndex = null;
+  calibration.applied = false;
+  dom.calibrationLayer.classList.add("is-picking");
+  dom.calibrationSummary.textContent = calibration.mode === "wall"
+    ? "벽면의 왼쪽 위 모서리를 선택하세요."
+    : "기준 물체의 첫 번째 점을 선택하세요.";
+  renderCalibrationOverlay();
+  refreshCalibrationReadout();
+}
+
+function onCalibrationPointerDown(event) {
+  const handle = event.target.closest?.(".calibrationHandle");
+
+  if (handle) {
+    calibration.draggingIndex = Number(handle.dataset.pointIndex);
+    event.preventDefault();
+    return;
+  }
+
+  if (!calibration.isPicking) return;
+
+  event.preventDefault();
+  const point = normalizeCalibrationPoint(event.clientX, event.clientY);
+  calibration.points.push(point);
+
+  const requiredPoints = calibration.mode === "wall" ? 4 : 2;
+  if (calibration.points.length >= requiredPoints) {
+    calibration.points = calibration.points.slice(0, requiredPoints);
+    calibration.isPicking = false;
+    dom.calibrationLayer.classList.remove("is-picking");
+    dom.calibrationSummary.textContent = calibration.mode === "wall"
+      ? "벽면 선택 완료. 실제 가로·세로를 입력해 주세요."
+      : "두 점 선택 완료. 실제 길이를 입력해 주세요.";
+  } else {
+    const wallSteps = ["오른쪽 위", "오른쪽 아래", "왼쪽 아래"];
+    dom.calibrationSummary.textContent = calibration.mode === "wall"
+      ? `벽면의 ${wallSteps[calibration.points.length - 1]} 모서리를 선택하세요.`
+      : "두 번째 점을 선택하세요.";
+  }
+
+  renderCalibrationOverlay();
+  refreshCalibrationReadout();
+}
+
+function onCalibrationPointerMove(event) {
+  if (calibration.draggingIndex === null) return;
+
+  event.preventDefault();
+  calibration.points[calibration.draggingIndex] = normalizeCalibrationPoint(event.clientX, event.clientY);
+  renderCalibrationOverlay();
+  refreshCalibrationReadout();
+
+  if (calibration.applied) {
+    applyReferenceCalibration(false, false);
+  }
+}
+
+function onCalibrationPointerUp() {
+  calibration.draggingIndex = null;
+}
+
+function normalizeCalibrationPoint(clientX, clientY) {
+  return {
+    x: THREE.MathUtils.clamp(clientX / Math.max(window.innerWidth, 1), 0, 1),
+    y: THREE.MathUtils.clamp(clientY / Math.max(window.innerHeight, 1), 0, 1)
+  };
+}
+
+function renderCalibrationOverlay() {
+  if (!dom.calibrationLayer) return;
+
+  dom.calibrationLayer.classList.toggle("has-point-1", calibration.points.length >= 1);
+  dom.calibrationLayer.classList.toggle("has-point-2", calibration.points.length >= 2);
+  dom.calibrationLayer.classList.toggle("has-point-3", calibration.points.length >= 3);
+  dom.calibrationLayer.classList.toggle("has-point-4", calibration.points.length >= 4);
+  dom.calibrationLayer.classList.toggle("has-line", calibration.mode === "floor" && calibration.points.length >= 2);
+  dom.calibrationLayer.classList.toggle("has-plane", calibration.mode === "wall" && calibration.points.length >= 4);
+
+  const handles = dom.calibrationLayer.querySelectorAll(".calibrationHandle");
+  calibration.points.forEach((point, index) => {
+    const handle = handles[index];
+    if (!handle) return;
+    handle.style.left = `${point.x * 100}%`;
+    handle.style.top = `${point.y * 100}%`;
+  });
+
+  if (calibration.points.length >= 2 && dom.calibrationLine) {
+    const [point1, point2] = calibration.points;
+    dom.calibrationLine.setAttribute("x1", String(point1.x * 100));
+    dom.calibrationLine.setAttribute("y1", String(point1.y * 100));
+    dom.calibrationLine.setAttribute("x2", String(point2.x * 100));
+    dom.calibrationLine.setAttribute("y2", String(point2.y * 100));
+  }
+
+  if (calibration.points.length >= 4 && dom.calibrationPlane) {
+    dom.calibrationPlane.setAttribute(
+      "points",
+      calibration.points.map((point) => `${point.x * 100},${point.y * 100}`).join(" ")
+    );
+  }
+}
+
+function getCalibrationPixelLength() {
+  if (calibration.points.length < 2) return 0;
+
+  const [point1, point2] = calibration.points;
+  return Math.hypot(
+    (point2.x - point1.x) * window.innerWidth,
+    (point2.y - point1.y) * window.innerHeight
+  );
+}
+
+function getCalibrationReferenceMeters() {
+  const value = Number(dom.calibrationLength?.value);
+  if (!Number.isFinite(value) || value <= 0) return 0;
+  return dom.calibrationUnit?.value === "mm" ? value / 1000 : value / 100;
+}
+
+function applyReferenceCalibration(record = true, notify = true) {
+  if (!photoPreviewMode) {
+    if (notify) showToast("사진 배치 모드에서만 기준 길이를 적용할 수 있습니다.");
+    return false;
+  }
+
+  if (!selectedObject || !currentProduct) {
+    if (notify) showToast("제품을 먼저 배치해 주세요.");
+    return false;
+  }
+
+  if (calibration.mode === "wall") {
+    return applyWallCalibration(record, notify);
+  }
+
+  const pixelLength = getCalibrationPixelLength();
+  const referenceMeters = getCalibrationReferenceMeters();
+
+  if (calibration.points.length < 2) {
+    if (notify) showToast("기준점 두 개를 먼저 선택해 주세요.");
+    return false;
+  }
+
+  if (pixelLength < 24) {
+    if (notify) showToast("기준점 사이를 더 넓게 지정해 주세요.");
+    return false;
+  }
+
+  if (referenceMeters <= 0) {
+    if (notify) showToast("실제 길이를 0보다 크게 입력해 주세요.");
+    return false;
+  }
+
+  const before = record ? snapshotScene() : null;
+  const productHeight = Number(selectedObject.userData.dimensions?.height || currentProduct.height);
+  const productPixelHeight = (productHeight / referenceMeters) * pixelLength;
+  const worldPosition = selectedObject.getWorldPosition(new THREE.Vector3());
+  const objectDistance = Math.max(camera.position.distanceTo(worldPosition), 0.1);
+  const targetWorldHeight = pixelHeightToWorldHeight(
+    productPixelHeight,
+    objectDistance,
+    camera,
+    window.innerHeight
+  );
+  const autoUserScale = targetWorldHeight / Math.max(productHeight, 0.0001);
+
+  calibration.referenceMeters = referenceMeters;
+  calibration.pixelLength = pixelLength;
+  calibration.pixelsPerMeter = pixelLength / referenceMeters;
+  calibration.autoUserScale = autoUserScale;
+  calibration.applied = true;
+
+  applyUserScale(selectedObject, autoUserScale * calibration.fineTune);
+  updateDimensionOverlay();
+  refreshCalibrationReadout();
+
+  dom.calibrationSummary.textContent = `기준 ${formatReferenceLength(referenceMeters)} 적용됨`;
+  if (record) recordHistory(before);
+  if (notify) showToast("기준 길이에 맞춰 제품 크기를 보정했습니다.");
+  return true;
+}
+
+function pixelHeightToWorldHeight(pixelHeight, objectDistance, perspectiveCamera, viewportHeight) {
+  const verticalFov = THREE.MathUtils.degToRad(perspectiveCamera.fov);
+  const visibleWorldHeight = 2 * Math.tan(verticalFov / 2) * objectDistance;
+  return visibleWorldHeight * (pixelHeight / Math.max(viewportHeight, 1));
+}
+
+function pixelWidthToWorldWidth(pixelWidth, objectDistance, perspectiveCamera, viewportWidth) {
+  const verticalFov = THREE.MathUtils.degToRad(perspectiveCamera.fov);
+  const visibleWorldHeight = 2 * Math.tan(verticalFov / 2) * objectDistance;
+  const visibleWorldWidth = visibleWorldHeight * perspectiveCamera.aspect;
+  return visibleWorldWidth * (pixelWidth / Math.max(viewportWidth, 1));
+}
+
+function getWallSizeMeters() {
+  const width = Number(dom.wallWidth?.value) / 100;
+  const height = Number(dom.wallHeight?.value) / 100;
+  return {
+    width: Number.isFinite(width) && width > 0 ? width : 0,
+    height: Number.isFinite(height) && height > 0 ? height : 0
+  };
+}
+
+function bilinearWallPoint(u, v) {
+  if (calibration.points.length < 4) return null;
+  const [p0, p1, p2, p3] = calibration.points;
+  const dx1 = p1.x - p2.x;
+  const dx2 = p3.x - p2.x;
+  const dx3 = p0.x - p1.x + p2.x - p3.x;
+  const dy1 = p1.y - p2.y;
+  const dy2 = p3.y - p2.y;
+  const dy3 = p0.y - p1.y + p2.y - p3.y;
+  const determinant = dx1 * dy2 - dx2 * dy1;
+  let g = 0;
+  let h = 0;
+
+  if (Math.abs(determinant) > 0.0000001) {
+    g = (dx3 * dy2 - dx2 * dy3) / determinant;
+    h = (dx1 * dy3 - dx3 * dy1) / determinant;
+  }
+
+  const a = p1.x - p0.x + g * p1.x;
+  const b = p3.x - p0.x + h * p3.x;
+  const c = p0.x;
+  const d = p1.y - p0.y + g * p1.y;
+  const e = p3.y - p0.y + h * p3.y;
+  const f = p0.y;
+  const denominator = g * u + h * v + 1;
+
+  return {
+    x: (a * u + b * v + c) / denominator,
+    y: (d * u + e * v + f) / denominator
+  };
+}
+
+function getWallPixelMetrics(u, v) {
+  const left = bilinearWallPoint(0, v);
+  const right = bilinearWallPoint(1, v);
+  const top = bilinearWallPoint(u, 0);
+  const bottom = bilinearWallPoint(u, 1);
+  if (!left || !right || !top || !bottom) return null;
+  return {
+    width: Math.hypot((right.x - left.x) * window.innerWidth, (right.y - left.y) * window.innerHeight),
+    height: Math.hypot((bottom.x - top.x) * window.innerWidth, (bottom.y - top.y) * window.innerHeight)
+  };
+}
+
+function getWallPolygonAreaPixels() {
+  if (calibration.points.length < 4) return 0;
+  let area = 0;
+  for (let index = 0; index < 4; index += 1) {
+    const current = calibration.points[index];
+    const next = calibration.points[(index + 1) % 4];
+    area += current.x * window.innerWidth * next.y * window.innerHeight;
+    area -= next.x * window.innerWidth * current.y * window.innerHeight;
+  }
+  return Math.abs(area) / 2;
+}
+
+function applyWallCalibration(record = true, notify = true) {
+  if (calibration.points.length < 4) {
+    if (notify) showToast("벽면의 네 모서리를 먼저 선택해 주세요.");
+    return false;
+  }
+
+  const wallSize = getWallSizeMeters();
+  if (!wallSize.width || !wallSize.height) {
+    if (notify) showToast("벽면의 실제 가로·세로를 입력해 주세요.");
+    return false;
+  }
+  if (getWallPolygonAreaPixels() < 1600) {
+    if (notify) showToast("벽면 영역을 더 넓게 지정해 주세요.");
+    return false;
+  }
+
+  const productWidth = Number(selectedObject.userData.dimensions?.width || currentProduct.width);
+  const productHeight = Number(selectedObject.userData.dimensions?.height || currentProduct.height);
+  const halfU = Math.min((productWidth / wallSize.width) / 2, 0.49);
+  const halfV = Math.min((productHeight / wallSize.height) / 2, 0.49);
+  calibration.wallU = THREE.MathUtils.clamp(calibration.wallU, halfU, 1 - halfU);
+  calibration.wallV = THREE.MathUtils.clamp(calibration.wallV, halfV, 1 - halfV);
+
+  const metrics = getWallPixelMetrics(calibration.wallU, calibration.wallV);
+  const targetPoint = bilinearWallPoint(calibration.wallU, calibration.wallV);
+  if (!metrics || !targetPoint) return false;
+
+  const productPixelWidth = metrics.width * (productWidth / wallSize.width);
+  const productPixelHeight = metrics.height * (productHeight / wallSize.height);
+  const before = record ? snapshotScene() : null;
+  const worldPosition = selectedObject.getWorldPosition(new THREE.Vector3());
+  const objectDistance = Math.max(camera.position.distanceTo(worldPosition), 0.1);
+  const heightScale = pixelHeightToWorldHeight(productPixelHeight, objectDistance, camera, window.innerHeight) / Math.max(productHeight, 0.0001);
+  const widthScale = pixelWidthToWorldWidth(productPixelWidth, objectDistance, camera, window.innerWidth) / Math.max(productWidth, 0.0001);
+  const autoUserScale = Math.sqrt(Math.max(heightScale, 0.0001) * Math.max(widthScale, 0.0001));
+
+  calibration.referenceMeters = wallSize.height;
+  calibration.pixelLength = metrics.height;
+  calibration.pixelsPerMeter = metrics.height / wallSize.height;
+  calibration.autoUserScale = autoUserScale;
+  calibration.applied = true;
+
+  applyUserScale(selectedObject, autoUserScale * calibration.fineTune);
+  selectedObject.position.copy(screenPointToWorld(targetPoint.x, targetPoint.y, selectedObject.position.z));
+  if (!selectedObject.userData.wallBaseRotation) {
+    selectedObject.userData.wallBaseRotation = {
+      x: selectedObject.rotation.x,
+      y: selectedObject.rotation.y,
+      z: selectedObject.rotation.z
+    };
+  }
+  const topLeft = calibration.points[0];
+  const topRight = calibration.points[1];
+  const screenAngle = Math.atan2(
+    (topRight.y - topLeft.y) * window.innerHeight,
+    (topRight.x - topLeft.x) * window.innerWidth
+  );
+  selectedObject.rotation.z = selectedObject.userData.wallBaseRotation.z - screenAngle;
+
+  updateWallPlacementControls();
+  updateDimensionOverlay();
+  refreshCalibrationReadout();
+  dom.calibrationSummary.textContent = `벽면 ${Math.round(wallSize.width * 100)} × ${Math.round(wallSize.height * 100)}cm 적용됨`;
+  if (record) recordHistory(before);
+  if (notify) showToast("벽면 크기와 위치에 맞춰 제품을 배치했습니다.");
+  return true;
+}
+
+function screenPointToWorld(normalizedX, normalizedY, targetZ = 0) {
+  const nearPoint = new THREE.Vector3(normalizedX * 2 - 1, -(normalizedY * 2 - 1), 0.5).unproject(camera);
+  const direction = nearPoint.sub(camera.position).normalize();
+  const distance = Math.abs(direction.z) > 0.0001 ? (targetZ - camera.position.z) / direction.z : 0;
+  return camera.position.clone().add(direction.multiplyScalar(distance));
+}
+
+function screenPointToWallUV(clientX, clientY) {
+  if (calibration.points.length < 4) return null;
+  const target = { x: clientX / window.innerWidth, y: clientY / window.innerHeight };
+  let u = calibration.wallU;
+  let v = calibration.wallV;
+  for (let iteration = 0; iteration < 8; iteration += 1) {
+    const point = bilinearWallPoint(u, v);
+    const step = 0.001;
+    const pointU = bilinearWallPoint(Math.min(u + step, 1), v);
+    const pointV = bilinearWallPoint(u, Math.min(v + step, 1));
+    if (!point || !pointU || !pointV) break;
+    const errorX = target.x - point.x;
+    const errorY = target.y - point.y;
+    const duX = (pointU.x - point.x) / step;
+    const duY = (pointU.y - point.y) / step;
+    const dvX = (pointV.x - point.x) / step;
+    const dvY = (pointV.y - point.y) / step;
+    const determinant = duX * dvY - duY * dvX;
+    if (Math.abs(determinant) < 0.000001) break;
+    u += (errorX * dvY - errorY * dvX) / determinant;
+    v += (duX * errorY - duY * errorX) / determinant;
+    u = THREE.MathUtils.clamp(u, 0, 1);
+    v = THREE.MathUtils.clamp(v, 0, 1);
+  }
+  return { u, v };
+}
+
+function resetCalibration(notify = true, resetProduct = true) {
+  const before = selectedObject ? snapshotScene() : null;
+
+  calibration.points = [];
+  calibration.isPicking = false;
+  calibration.draggingIndex = null;
+  calibration.applied = false;
+  calibration.referenceMeters = 0;
+  calibration.pixelLength = 0;
+  calibration.pixelsPerMeter = 0;
+  calibration.autoUserScale = 1;
+  calibration.fineTune = 1;
+  calibration.wallU = 0.5;
+  calibration.wallV = 0.5;
+
+  dom.calibrationLayer?.classList.remove("is-picking");
+  if (dom.calibrationFineTune) dom.calibrationFineTune.value = "100";
+  if (dom.calibrationFineTuneValue) dom.calibrationFineTuneValue.textContent = "100%";
+  if (dom.calibrationSummary) dom.calibrationSummary.textContent = "기준점이 설정되지 않았습니다.";
+
+  if (resetProduct && selectedObject && photoPreviewMode) {
+    applyUserScale(selectedObject, 1);
+    if (selectedObject.userData.wallBaseRotation) {
+      const rotation = selectedObject.userData.wallBaseRotation;
+      selectedObject.rotation.set(rotation.x, rotation.y, rotation.z);
+      delete selectedObject.userData.wallBaseRotation;
+    }
+    updateDimensionOverlay();
+    recordHistory(before);
+  }
+
+  renderCalibrationOverlay();
+  updateWallPlacementControls();
+  refreshCalibrationReadout();
+  if (notify) showToast("기준 길이 설정을 초기화했습니다.");
+}
+
+function refreshCalibrationReadout() {
+  if (!dom.calibrationReadout) return;
+
+  if (calibration.mode === "wall") {
+    const wallSize = getWallSizeMeters();
+    const productWidth = Number(selectedObject?.userData?.dimensions?.width || currentProduct?.width || 0);
+    const productHeight = Number(selectedObject?.userData?.dimensions?.height || currentProduct?.height || 0);
+    const metrics = getWallPixelMetrics(calibration.wallU, calibration.wallV);
+    const centerHeightCm = wallSize.height ? (1 - calibration.wallV) * wallSize.height * 100 : 0;
+    const rows = dom.calibrationReadout.querySelectorAll("span");
+    if (rows[0]) rows[0].textContent = `벽면: ${wallSize.width && wallSize.height ? `${Math.round(wallSize.width * 100)} × ${Math.round(wallSize.height * 100)} cm` : "-"}`;
+    if (rows[1]) rows[1].textContent = `제품 중심 높이: ${centerHeightCm ? `${Math.round(centerHeightCm)} cm` : "-"}`;
+    if (rows[2]) rows[2].textContent = `제품: ${productWidth && productHeight ? `${Math.round(productWidth * 100)} × ${Math.round(productHeight * 100)} cm${metrics && wallSize.width && wallSize.height ? ` → 약 ${Math.round(metrics.width * productWidth / wallSize.width)} × ${Math.round(metrics.height * productHeight / wallSize.height)} px` : ""}` : "-"}`;
+    return;
+  }
+
+  const pixelLength = getCalibrationPixelLength();
+  const referenceMeters = getCalibrationReferenceMeters();
+  const pixelsPerCm = referenceMeters > 0 ? pixelLength / (referenceMeters * 100) : 0;
+  const productHeightMeters = Number(selectedObject?.userData?.dimensions?.height || currentProduct?.height || 0);
+  const productPixelHeight = pixelsPerCm > 0 ? productHeightMeters * 100 * pixelsPerCm : 0;
+  const rows = dom.calibrationReadout.querySelectorAll("span");
+
+  if (rows[0]) rows[0].textContent = `화면 길이: ${pixelLength ? `${Math.round(pixelLength)} px` : "-"}`;
+  if (rows[1]) rows[1].textContent = `환산값: ${pixelsPerCm ? `${pixelsPerCm.toFixed(2)} px/cm` : "-"}`;
+  if (rows[2]) {
+    rows[2].textContent = `제품 높이: ${productHeightMeters ? `${Math.round(productHeightMeters * 100)} cm${productPixelHeight ? ` → ${Math.round(productPixelHeight)} px` : ""}` : "-"}`;
+  }
+}
+
+function formatReferenceLength(meters) {
+  const centimeters = meters * 100;
+  return `${Number.isInteger(centimeters) ? centimeters : centimeters.toFixed(1)} cm`;
+}
+
+function bindHoldRotate(id, direction, axis = "y") {
+  const el = document.getElementById(id);
+
+  if (!el) {
+    console.warn(`[버튼 없음] #${id}`);
+    return;
+  }
+
+  let frameId = null;
+  let lastTime = 0;
+  let beforeRotate = null;
+  const speed = THREE.MathUtils.degToRad(45);
+
+  const step = (time) => {
+    if (!lastTime) {
+      lastTime = time;
+    }
+
+    const delta = Math.min((time - lastTime) / 1000, 0.05);
+    lastTime = time;
+    rotateSelected(direction * speed * delta, true, axis);
+    frameId = requestAnimationFrame(step);
+  };
+
+  const start = (event) => {
+    event.preventDefault();
+
+    if (!selectedObject) {
+      rotateSelected(0, false, axis);
+      return;
+    }
+
+    if (frameId !== null) return;
+
+    beforeRotate = snapshotScene();
+    lastTime = 0;
+    frameId = requestAnimationFrame(step);
+
+    try {
+      el.setPointerCapture?.(event.pointerId);
+    } catch {
+      // Pointer capture is helpful, but not required for hold-to-rotate.
+    }
+  };
+
+  const stop = (event) => {
+    if (frameId === null) return;
+
+    cancelAnimationFrame(frameId);
+    frameId = null;
+    lastTime = 0;
+    recordHistory(beforeRotate);
+    beforeRotate = null;
+
+    try {
+      el.releasePointerCapture?.(event.pointerId);
+    } catch {
+      // Some mobile browsers release pointer capture automatically.
+    }
+  };
+
+  el.addEventListener("pointerdown", start);
+  el.addEventListener("pointerup", stop);
+  el.addEventListener("pointercancel", stop);
+  el.addEventListener("pointerleave", stop);
+}
+
+async function loadManifest() {
+  try {
+    const res = await fetch("manifest.json", { cache: "no-store" });
+
+    if (!res.ok) {
+      throw new Error(`manifest.json 로드 실패: ${res.status}`);
+    }
+
+    const data = await res.json();
+    products = data.products || [];
+
+    dom.productSelect.innerHTML = "";
+
+    for (const product of products) {
+      const option = document.createElement("option");
+      option.value = product.id;
+      option.textContent = `${product.name} (${Math.round(product.height * 1000)}mm)`;
+      dom.productSelect.appendChild(option);
+    }
+
+    currentProduct = products[0] || null;
+
+    if (currentProduct) {
+      dom.productSelect.value = currentProduct.id;
+    }
+
+    showToast("제품 목록 로드 완료");
+  } catch (err) {
+    console.error(err);
+    showToast("manifest.json을 불러오지 못했습니다.");
+  }
+}
+
+async function startAR() {
+  console.log("AR 시작 버튼 클릭됨");
+
+  if (!navigator.xr) {
+    alert("이 브라우저에서는 AR 배치가 지원되지 않습니다.\n\n3D 미리보기를 사용하거나 Android Chrome에서 다시 시도해주세요.");
+    showToast("AR 미지원 브라우저입니다.");
+    return;
+  }
+
+  try {
+    const supported = await navigator.xr.isSessionSupported("immersive-ar");
+
+    if (!supported) {
+      alert("현재 기기/브라우저에서는 WebXR AR이 지원되지 않습니다.\n\n3D 미리보기로 제품을 확인하거나, Android Chrome + ARCore 지원 기기에서 다시 시도해주세요.");
+      showToast("현재 기기에서 AR이 지원되지 않습니다.");
+      return;
+    }
+
+    const session = await navigator.xr.requestSession("immersive-ar", {
+      requiredFeatures: ["hit-test"],
+      optionalFeatures: ["dom-overlay", "local-floor"],
+      domOverlay: { root: document.body }
+    });
+
+    arReferenceSpaceType = await chooseReferenceSpaceType(session);
+    renderer.xr.setReferenceSpaceType(arReferenceSpaceType);
+    await renderer.xr.setSession(session);
+
+    previewMode = false;
+    photoPreviewMode = false;
+    document.body.classList.remove("photo-calibration-available");
+    calibration.isPicking = false;
+    calibration.draggingIndex = null;
+    dom.calibrationLayer?.classList.remove("is-picking");
+    uiFolded = false;
+    updateUiFoldState();
+    dom.photoPreviewBg?.classList.remove("show");
+    dom.photoPreviewHint?.classList.remove("show");
+    orbitControls.enabled = false;
+    previewGrid.visible = false;
+    dom.startScreen.classList.add("hidden");
+    dom.topBar.classList.add("show");
+    dom.reticle.style.display = "block";
+
+    showToast(`AR 시작됨. 바닥을 비춰주세요. (${arReferenceSpaceType})`);
+
+    session.addEventListener("end", () => {
+      hitTestSourceRequested = false;
+      hitTestSource = null;
+      reticleObject.visible = false;
+      dom.reticle.style.display = "none";
+      uiFolded = false;
+      updateUiFoldState();
+      dom.topBar.classList.remove("show");
+      dom.startScreen.classList.remove("hidden");
+    });
+
+  } catch (err) {
+    console.error("AR 시작 실패:", err);
+    if (isReferenceSpaceError(err) && currentProduct) {
+      alert("이 기기는 WebXR AR 기준 좌표계를 지원하지 않아 기본 AR 뷰어로 전환합니다.\n\n기본 AR 뷰어에서는 제품 확인은 가능하지만 앱 안의 이동/회전 버튼은 사용할 수 없습니다.");
+      openNativeArFallback(currentProduct);
+      showToast("기본 AR 뷰어로 전환합니다.");
+      return;
+    }
+
+    alert("AR 시작 실패: " + err.message + "\n\n3D 미리보기 버튼으로 제품을 확인할 수 있습니다.");
+    showToast("AR 시작 실패");
+  }
+}
+
+function isReferenceSpaceError(err) {
+  return String(err?.message || err).includes("reference space");
+}
+
+function openNativeArFallback(product) {
+  const fileUrl = new URL(product.file, window.location.href).href;
+  const fallbackUrl = new URL(window.location.href);
+  fallbackUrl.searchParams.set("mode", "preview");
+
+  const sceneViewerUrl =
+    "intent://arvr.google.com/scene-viewer/1.0" +
+    `?file=${encodeURIComponent(fileUrl)}` +
+    "&mode=ar_preferred" +
+    `&title=${encodeURIComponent(product.name)}` +
+    "#Intent;scheme=https;package=com.google.ar.core;action=android.intent.action.VIEW;" +
+    `S.browser_fallback_url=${encodeURIComponent(fallbackUrl.href)};end;`;
+
+  window.location.href = sceneViewerUrl;
+}
+
+async function chooseReferenceSpaceType(session) {
+  for (const type of ["local-floor", "local"]) {
+    try {
+      await session.requestReferenceSpace(type);
+      return type;
+    } catch (err) {
+      console.warn(`Reference space not available: ${type}`, err);
+    }
+  }
+
+  throw new Error("이 기기에서 사용할 수 있는 AR 기준 좌표계를 찾지 못했습니다.");
+}
+
+async function startPreview(message) {
+  previewMode = true;
+  photoPreviewMode = true;
+  hitTestSourceRequested = false;
+  hitTestSource = null;
+  reticleObject.visible = false;
+  previewGrid.visible = false;
+  orbitControls.enabled = false;
+  uiFolded = false;
+  updateUiFoldState();
+
+  dom.startScreen.classList.add("hidden");
+  dom.topBar.classList.add("show");
+  dom.reticle.style.display = "none";
+  dom.photoPreviewBg?.classList.add("show");
+  dom.photoPreviewHint?.classList.add("show");
+  document.body.classList.add("photo-calibration-available");
+  renderCalibrationOverlay();
+  refreshCalibrationReadout();
+
+  await placePreviewProduct();
+  showToast(message);
+}
+
+function requestPhotoPreview() {
+  if (!dom.photoInput) {
+    startPreview("사진 배경 3D 배치 모드입니다.");
+    return;
+  }
+
+  dom.photoInput.value = "";
+  dom.photoInput.click();
+}
+
+function handlePhotoPreviewFile(event) {
+  const file = event.target.files?.[0];
+
+  if (!file) {
+    showToast("갤러리에서 사진을 선택하거나 새로 촬영해 주세요.");
+    return;
+  }
+
+  resetCalibration(false, true);
+
+  if (photoPreviewObjectUrl) {
+    URL.revokeObjectURL(photoPreviewObjectUrl);
+  }
+
+  photoPreviewObjectUrl = URL.createObjectURL(file);
+
+  if (dom.photoPreviewBg) {
+    dom.photoPreviewBg.style.backgroundImage = `url("${photoPreviewObjectUrl}")`;
+  }
+
+  startPreview("선택한 사진 위에 제품을 올렸습니다.");
+}
+
+async function preloadCurrentProduct() {
+  if (!currentProduct) {
+    showToast("제품을 먼저 선택하세요.");
+    return;
+  }
+
+  try {
+    setLoading(true, "모델 불러오는 중...");
+    showToast("모델 불러오는 중...");
+    await loadModel(currentProduct);
+    showToast("모델 준비 완료");
+  } catch (err) {
+    console.error(err);
+    showToast("모델 로드 실패. 경로와 파일명을 확인하세요.");
+  } finally {
+    setLoading(false);
+  }
+}
+
+async function placeCurrentProduct() {
+  if (!currentProduct) {
+    showToast("제품을 먼저 선택하세요.");
+    return;
+  }
+
+  if (previewMode) {
+    await placePreviewProduct();
+    return;
+  }
+
+  if (!reticleObject.visible) {
+    showToast("바닥 인식 후 배치해주세요.");
+    return;
+  }
+
+  try {
+    const before = snapshotScene();
+    setLoading(true, `${currentProduct.name} 불러오는 중...`);
+    const model = await loadModel(currentProduct);
+
+    model.matrixAutoUpdate = true;
+    model.position.setFromMatrixPosition(reticleObject.matrix);
+    faceModelToCamera(model);
+
+    if (currentProduct.rotationYDeg) {
+      model.rotation.y += THREE.MathUtils.degToRad(currentProduct.rotationYDeg);
+    }
+
+    applyUserScale(model, dom.lockScale.checked ? 1 : Number(dom.scaleRange.value) / 100);
+
+    model.userData.productId = currentProduct.id;
+    model.userData.productName = currentProduct.name;
+
+    scene.add(model);
+    placedObjects.push(model);
+    selectObject(model);
+    recordHistory(before);
+    uiFolded = true;
+    updateUiFoldState();
+    if (!uiFolded) {
+      showCapturePrompt();
+    }
+
+    showToast(`${currentProduct.name} 배치 완료. 화면저장을 눌러 촬영하세요.`);
+  } catch (err) {
+    console.error(err);
+    showToast("모델 배치 실패");
+  } finally {
+    setLoading(false);
+  }
+}
+
+async function placePreviewProduct() {
+  if (!currentProduct) {
+    showToast("제품을 먼저 선택하세요.");
+    return;
+  }
+
+  try {
+    const before = snapshotScene();
+    setLoading(true, `${currentProduct.name} 불러오는 중...`);
+    clearPlacedObjects();
+
+    const model = await loadModel(currentProduct);
+    model.matrixAutoUpdate = true;
+    model.position.set(0, 0, 0);
+
+    if (currentProduct.rotationYDeg) {
+      model.rotation.y += THREE.MathUtils.degToRad(currentProduct.rotationYDeg);
+    }
+
+    applyUserScale(model, dom.lockScale.checked ? 1 : Number(dom.scaleRange.value) / 100);
+
+    model.userData.productId = currentProduct.id;
+    model.userData.productName = currentProduct.name;
+
+    scene.add(model);
+    placedObjects.push(model);
+    framePhotoPreviewCamera(model);
+    selectObject(model);
+    if (calibration.applied) {
+      applyReferenceCalibration(false, false);
+    }
+    recordHistory(before);
+    uiFolded = true;
+    updateUiFoldState();
+  } catch (err) {
+    console.error(err);
+    showToast("3D 미리보기 로드 실패");
+  } finally {
+    setLoading(false);
+  }
+}
+
+function framePreviewCamera(model) {
+  const box = new THREE.Box3().setFromObject(model);
+  const size = box.getSize(new THREE.Vector3());
+  const center = box.getCenter(new THREE.Vector3());
+  const radius = Math.max(size.x, size.y, size.z, 1);
+
+  orbitControls.target.copy(center);
+  camera.position.set(center.x, center.y + radius * 0.35, center.z + radius * 1.8);
+  camera.lookAt(center);
+  orbitControls.update();
+}
+
+function framePhotoPreviewCamera(model) {
+  const box = new THREE.Box3().setFromObject(model);
+  const size = box.getSize(new THREE.Vector3());
+  const center = box.getCenter(new THREE.Vector3());
+  const maxSize = Math.max(size.x, size.y, size.z, 1);
+
+  model.position.sub(center);
+  model.position.y -= 0.12;
+  model.rotation.x = 0;
+
+  camera.position.set(0, 0.95, Math.max(4.2, maxSize * 2.2));
+  camera.lookAt(0, 0.95, 0);
+  camera.updateProjectionMatrix();
+}
+
+function faceModelToCamera(model) {
+  const cameraPosition = new THREE.Vector3();
+  camera.getWorldPosition(cameraPosition);
+
+  const dx = cameraPosition.x - model.position.x;
+  const dz = cameraPosition.z - model.position.z;
+
+  if (dx * dx + dz * dz < 0.0001) {
+    return;
+  }
+
+  model.rotation.set(0, Math.atan2(dx, dz), 0);
+}
+
+function loadModel(product) {
+  if (modelCache.has(product.id)) {
+    const model = cloneModel(modelCache.get(product.id));
+    safelyApplyProductTextures(product, model);
+    prepareProductScale(model, product);
+    return Promise.resolve(model);
+  }
+
+  return new Promise((resolve, reject) => {
+    gltfLoader.load(
+      product.file,
+      (gltf) => {
+        const root = gltf.scene;
+
+        root.traverse((child) => {
+          if (!child.isMesh) return;
+
+          child.castShadow = true;
+          child.receiveShadow = true;
+
+          if (child.material) {
+            if (Array.isArray(child.material)) {
+              child.material.forEach(prepareMaterial);
+            } else {
+              prepareMaterial(child.material);
+            }
+          }
+        });
+
+        modelCache.set(product.id, root);
+        const model = cloneModel(root);
+        safelyApplyProductTextures(product, model);
+        prepareProductScale(model, product);
+        resolve(model);
+      },
+      undefined,
+      reject
+    );
+  });
+}
+
+function prepareProductScale(model, product) {
+  const box = new THREE.Box3().setFromObject(model);
+  const size = box.getSize(new THREE.Vector3());
+  const targetWidth = Number(product.width) || size.x;
+  const targetHeight = Number(product.height) || size.y;
+  const targetDepth = Number(product.depth) || size.z;
+  const baseScale = {
+    x: targetWidth / Math.max(size.x, 0.0001),
+    y: targetHeight / Math.max(size.y, 0.0001),
+    z: targetDepth / Math.max(size.z, 0.0001)
+  };
+
+  model.userData.baseScale = baseScale;
+  model.userData.userScale = 1;
+  model.userData.dimensions = {
+    width: targetWidth,
+    height: targetHeight,
+    depth: targetDepth
+  };
+}
+
+function getScaleBasis(size, axis) {
+  if (axis === "x") return Math.max(size.x, 0.0001);
+  if (axis === "y") return Math.max(size.y, 0.0001);
+  if (axis === "z") return Math.max(size.z, 0.0001);
+
+  return Math.max(size.x, size.y, size.z, 0.0001);
+}
+
+function applyUserScale(model, userScale = 1) {
+  const baseScale = getBaseScale(model);
+  const nextUserScale = THREE.MathUtils.clamp(userScale, 0.25, 5);
+  model.userData.userScale = nextUserScale;
+  model.scale.set(
+    baseScale.x * nextUserScale,
+    baseScale.y * nextUserScale,
+    baseScale.z * nextUserScale
+  );
+}
+
+function getBaseScale(model) {
+  const value = model?.userData?.baseScale;
+
+  if (typeof value === "number") {
+    return { x: value, y: value, z: value };
+  }
+
+  return {
+    x: Number(value?.x) || 1,
+    y: Number(value?.y) || 1,
+    z: Number(value?.z) || 1
+  };
+}
+
+function getUserScale(model) {
+  return model?.userData?.userScale || 1;
+}
+
+function safelyApplyProductTextures(product, model) {
+  try {
+    applyProductTextures(product, model);
+  } catch (err) {
+    console.warn("Product texture application skipped.", err);
+  }
+}
+
+function prepareMaterial(material) {
+  if (material.map) {
+    material.map.colorSpace = THREE.SRGBColorSpace;
+    material.map.needsUpdate = true;
+  }
+
+  material.needsUpdate = true;
+}
+
+function applyProductTextures(product, root) {
+  if (product.id === "ai_kiosk_white") {
+    applyAiKioskTextures(root);
+    return;
+  }
+
+  if (product.id === "photo_kiosk_black") {
+    applyPhotoKioskTextures(root);
+  }
+}
+
+function applyAiKioskTextures(root) {
+  const screenTextures = AI_KIOSK_TEXTURES.screenFiles.map(loadAppTexture);
+  const speakerTexture = loadAppTexture(AI_KIOSK_TEXTURES.speakerFile);
+
+  root.traverse((child) => {
+    if (!child.isMesh) return;
+
+    const names = new Set([child.name, child.geometry?.name].filter(Boolean));
+    const isScreen = [...names].some((name) => AI_KIOSK_TEXTURES.screenMeshNames.has(name));
+    const isSpeaker = [...names].some((name) => AI_KIOSK_TEXTURES.speakerMeshNames.has(name));
+
+    if (isScreen) {
+      child.geometry = child.geometry.clone();
+      ensurePlanarUv(child.geometry, "xy");
+      child.material = new THREE.MeshBasicMaterial({
+        map: screenTextures[0],
+        toneMapped: false,
+        side: THREE.DoubleSide,
+        transparent: true,
+        opacity: 1
+      });
+      child.userData.screenTextures = screenTextures;
+      child.userData.textureSwapMs = TEXTURE_SWAP_MS;
+    }
+
+    if (isSpeaker) {
+      child.geometry = child.geometry.clone();
+      ensurePlanarUv(child.geometry, "xy");
+      child.material = new THREE.MeshStandardMaterial({
+        map: speakerTexture,
+        roughness: 0.72,
+        metalness: 0.0,
+        side: THREE.DoubleSide
+      });
+    }
+  });
+
+  addAiKioskTextureOverlays(root, screenTextures, speakerTexture);
+}
+
+function applyPhotoKioskTextures(root) {
+  const screenTextures = PHOTO_KIOSK_TEXTURES.screenFiles.map(loadAppTexture);
+
+  root.traverse((child) => {
+    if (!child.isMesh) return;
+
+    const names = new Set([child.name, child.geometry?.name].filter(Boolean));
+    const isScreen = [...names].some((name) => PHOTO_KIOSK_TEXTURES.screenMeshNames.has(name));
+
+    if (isScreen) {
+      child.geometry = child.geometry.clone();
+      ensurePlanarUv(child.geometry, "yz");
+      flipUv(child.geometry, true, true);
+      child.material = new THREE.MeshBasicMaterial({
+        map: screenTextures[0],
+        toneMapped: false,
+        side: THREE.DoubleSide,
+        transparent: true,
+        opacity: 1
+      });
+      child.userData.screenTextures = screenTextures;
+      child.userData.textureSwapMs = TEXTURE_SWAP_MS;
+    }
+  });
+}
+
+function addAiKioskTextureOverlays(root, screenTextures, speakerTexture) {
+  const screen = new THREE.Mesh(
+    new THREE.PlaneGeometry(AI_KIOSK_OVERLAYS.screen.width, AI_KIOSK_OVERLAYS.screen.height),
+    new THREE.MeshBasicMaterial({
+      map: screenTextures[0],
+      toneMapped: false,
+      side: THREE.DoubleSide,
+      depthTest: true,
+      depthWrite: false,
+      transparent: true,
+      opacity: 1
+    })
+  );
+  screen.name = "AI kiosk visible screen texture";
+  screen.position.copy(AI_KIOSK_OVERLAYS.screen.center);
+  screen.rotation.y = Math.PI;
+  screen.renderOrder = 30;
+  screen.userData.screenTextures = screenTextures;
+  screen.userData.textureSwapMs = TEXTURE_SWAP_MS;
+  root.add(screen);
+
+  const speaker = new THREE.Mesh(
+    new THREE.PlaneGeometry(AI_KIOSK_OVERLAYS.speaker.width, AI_KIOSK_OVERLAYS.speaker.height),
+    new THREE.MeshBasicMaterial({
+      map: speakerTexture,
+      toneMapped: false,
+      side: THREE.DoubleSide,
+      depthTest: true,
+      depthWrite: false,
+      transparent: true,
+      alphaTest: 0.08
+    })
+  );
+  speaker.name = "AI kiosk visible speaker texture";
+  speaker.position.copy(AI_KIOSK_OVERLAYS.speaker.center);
+  speaker.rotation.y = Math.PI;
+  speaker.renderOrder = 31;
+  root.add(speaker);
+}
+
+function loadAppTexture(url) {
+  if (textureCache.has(url)) return textureCache.get(url);
+
+  const texture = textureLoader.load(url);
+  texture.colorSpace = THREE.SRGBColorSpace;
+  texture.flipY = false;
+  texture.wrapS = THREE.ClampToEdgeWrapping;
+  texture.wrapT = THREE.ClampToEdgeWrapping;
+  texture.minFilter = THREE.LinearMipmapLinearFilter;
+  texture.magFilter = THREE.LinearFilter;
+  textureCache.set(url, texture);
+  return texture;
+}
+
+function ensurePlanarUv(geometry, axes = "xy") {
+  if (geometry.getAttribute("uv")) return;
+
+  const position = geometry.getAttribute("position");
+  if (!position) return;
+
+  geometry.computeBoundingBox();
+  const box = geometry.boundingBox;
+  if (!box) return;
+
+  const uv = [];
+
+  const axisA = axes[0];
+  const axisB = axes[1];
+  const indexA = axisA === "x" ? 0 : axisA === "y" ? 1 : 2;
+  const indexB = axisB === "x" ? 0 : axisB === "y" ? 1 : 2;
+  const min = [box.min.x, box.min.y, box.min.z];
+  const max = [box.max.x, box.max.y, box.max.z];
+  const sizeA = Math.max(max[indexA] - min[indexA], 0.0001);
+  const sizeB = Math.max(max[indexB] - min[indexB], 0.0001);
+
+  for (let i = 0; i < position.count; i += 1) {
+    const a = position.getComponent(i, indexA);
+    const b = position.getComponent(i, indexB);
+    uv.push((a - min[indexA]) / sizeA, 1 - (b - min[indexB]) / sizeB);
+  }
+
+  geometry.setAttribute("uv", new THREE.Float32BufferAttribute(uv, 2));
+}
+
+function flipUv(geometry, flipU = false, flipV = false) {
+  const uv = geometry.getAttribute("uv");
+  if (!uv) return;
+
+  for (let i = 0; i < uv.count; i += 1) {
+    if (flipU) uv.setX(i, 1 - uv.getX(i));
+    if (flipV) uv.setY(i, 1 - uv.getY(i));
+  }
+
+  uv.needsUpdate = true;
+}
+
+function cloneModel(source) {
+  const clone = source.clone(true);
+
+  clone.traverse((child) => {
+    if (!child.isMesh) return;
+
+    if (Array.isArray(child.material)) {
+      child.material = child.material.map((m) => m.clone());
+    } else if (child.material) {
+      child.material = child.material.clone();
+    }
+  });
+
+  return clone;
+}
+
+function updateDynamicTextures(timestamp = 0) {
+  const phase = timestamp % TEXTURE_SWAP_MS;
+  const fadeOut = phase > TEXTURE_SWAP_MS - TEXTURE_FADE_MS
+    ? (TEXTURE_SWAP_MS - phase) / TEXTURE_FADE_MS
+    : 1;
+  const fadeIn = phase < TEXTURE_FADE_MS ? phase / TEXTURE_FADE_MS : 1;
+  const opacity = Math.max(0.18, Math.min(fadeOut, fadeIn, 1));
+
+  for (const obj of placedObjects) {
+    obj.traverse((child) => {
+      if (!child.isMesh || !child.userData.screenTextures?.length || !child.material) return;
+
+      const textureIndex = Math.floor(timestamp / TEXTURE_SWAP_MS) % child.userData.screenTextures.length;
+      const nextTexture = child.userData.screenTextures[textureIndex];
+      child.material.transparent = true;
+      child.material.opacity = opacity;
+
+      if (child.material.map !== nextTexture) {
+        child.material.map = nextTexture;
+        child.material.needsUpdate = true;
+      }
+    });
+  }
+}
+
+
+function selectObject(obj) {
+  selectedObject = obj;
+  if (!obj) clearDimensionOverlay();
+
+  if (!obj) {
+    dom.editPanel.classList.remove("show");
+    dom.editTitle.textContent = "선택된 제품 없음";
+    refreshCalibrationReadout();
+    return;
+  }
+
+  dom.editPanel.classList.add("show");
+  dom.editTitle.textContent = obj.userData.productName || "선택된 제품";
+  editPanelExpanded = false;
+  updateEditPanelState();
+
+  const scalePct = Math.round(getUserScale(obj) * 100);
+  dom.scaleRange.value = scalePct;
+  dom.scaleValue.textContent = `${scalePct}%`;
+  updateDimensionOverlay();
+  refreshCalibrationReadout();
+}
+
+function onPhotoPreviewPointerDown(event) {
+  if (!photoPreviewMode || !selectedObject) return;
+
+  event.preventDefault();
+  previewPointers.set(event.pointerId, {
+    x: event.clientX,
+    y: event.clientY,
+    lastX: event.clientX,
+    lastY: event.clientY
+  });
+
+  try {
+    renderer.domElement.setPointerCapture?.(event.pointerId);
+  } catch {
+    // Some mobile browsers manage capture automatically.
+  }
+
+  previewGesture = getPhotoPreviewGestureState();
+}
+
+function onPhotoPreviewPointerMove(event) {
+  if (!photoPreviewMode || !selectedObject || !previewPointers.has(event.pointerId)) return;
+
+  event.preventDefault();
+  const point = previewPointers.get(event.pointerId);
+  point.x = event.clientX;
+  point.y = event.clientY;
+
+  const pointers = [...previewPointers.values()];
+
+  if (calibration.mode === "wall" && calibration.applied && pointers.length === 1) {
+    const wallPosition = screenPointToWallUV(point.x, point.y);
+    if (wallPosition) {
+      calibration.wallU = wallPosition.u;
+      calibration.wallV = wallPosition.v;
+      applyReferenceCalibration(false, false);
+    }
+  } else if (pointers.length >= 2 && previewGesture?.type === "pinch") {
+    const current = getTwoPointerMetrics(pointers[0], pointers[1]);
+    const scaleRatio = current.distance / Math.max(previewGesture.distance, 1);
+    const nextScale = THREE.MathUtils.clamp(previewGesture.scale * scaleRatio, 0.25, 2.6);
+    const delta = screenDeltaToWorld(
+      current.center.x - previewGesture.center.x,
+      current.center.y - previewGesture.center.y,
+      selectedObject.position
+    );
+
+    selectedObject.position.copy(previewGesture.position).add(delta);
+    applyUserScale(selectedObject, nextScale);
+    selectedObject.rotation.z = previewGesture.rotationZ + current.angle - previewGesture.angle;
+    syncScaleControl(nextScale);
+    updateDimensionOverlay();
+  } else if (pointers.length === 1) {
+    const dx = point.x - point.lastX;
+    const dy = point.y - point.lastY;
+    selectedObject.position.add(screenDeltaToWorld(dx, dy, selectedObject.position));
+    updateDimensionOverlay();
+  }
+
+  point.lastX = point.x;
+  point.lastY = point.y;
+}
+
+function onPhotoPreviewPointerEnd(event) {
+  if (!photoPreviewMode) return;
+
+  previewPointers.delete(event.pointerId);
+
+  try {
+    renderer.domElement.releasePointerCapture?.(event.pointerId);
+  } catch {
+    // Pointer capture may already be released.
+  }
+
+  previewGesture = getPhotoPreviewGestureState();
+}
+
+function getPhotoPreviewGestureState() {
+  if (!selectedObject) return null;
+
+  const pointers = [...previewPointers.values()];
+
+  if (pointers.length >= 2) {
+    const metrics = getTwoPointerMetrics(pointers[0], pointers[1]);
+    return {
+      type: "pinch",
+      ...metrics,
+      position: selectedObject.position.clone(),
+      scale: getUserScale(selectedObject),
+      rotationZ: selectedObject.rotation.z
+    };
+  }
+
+  return { type: "drag" };
+}
+
+function getTwoPointerMetrics(a, b) {
+  const dx = b.x - a.x;
+  const dy = b.y - a.y;
+
+  return {
+    center: {
+      x: (a.x + b.x) / 2,
+      y: (a.y + b.y) / 2
+    },
+    distance: Math.hypot(dx, dy),
+    angle: Math.atan2(dy, dx)
+  };
+}
+
+function screenDeltaToWorld(dx, dy, referencePosition) {
+  const distance = Math.max(camera.position.distanceTo(referencePosition), 0.5);
+  const visibleHeight = 2 * Math.tan(THREE.MathUtils.degToRad(camera.fov) / 2) * distance;
+  const visibleWidth = visibleHeight * camera.aspect;
+
+  return new THREE.Vector3(
+    (dx / window.innerWidth) * visibleWidth,
+    (-dy / window.innerHeight) * visibleHeight,
+    0
+  );
+}
+
+function syncScaleControl(scale) {
+  const pct = Math.round(scale * 100);
+  dom.scaleRange.value = pct;
+  dom.scaleValue.textContent = `${pct}%`;
+}
+
+function toggleEditPanel() {
+  if (!selectedObject) {
+    showToast("조작할 제품을 먼저 선택하세요.");
+    return;
+  }
+
+  editPanelExpanded = !editPanelExpanded;
+  updateEditPanelState();
+}
+
+function toggleUiFold() {
+  uiFolded = !uiFolded;
+  updateUiFoldState();
+}
+
+function updateUiFoldState() {
+  dom.topBar?.classList.toggle("folded", uiFolded);
+  document.body.classList.toggle("ui-clean", uiFolded);
+
+  if (dom.uiFoldBtn) {
+    dom.uiFoldBtn.textContent = uiFolded ? "화면 펼치기" : "화면 접기";
+    dom.uiFoldBtn.setAttribute("aria-expanded", String(!uiFolded));
+  }
+
+  if (uiFolded && dom.editPanel?.classList.contains("show")) {
+    editPanelExpanded = false;
+    updateEditPanelState();
+  }
+
+  if (uiFolded) {
+    hideCapturePrompt();
+  }
+}
+
+function updateEditPanelState() {
+  if (!dom.editPanel || !dom.editToggleBtn) return;
+
+  dom.editPanel.classList.toggle("collapsed", !editPanelExpanded);
+  dom.editToggleBtn.textContent = editPanelExpanded ? "접기" : "펼치기";
+  dom.editToggleBtn.setAttribute("aria-expanded", String(editPanelExpanded));
+}
+
+function selectByPointer(event) {
+  if (photoPreviewMode) return;
+  if (!placedObjects.length) return;
+
+  const rect = renderer.domElement.getBoundingClientRect();
+
+  const pointer = new THREE.Vector2(
+    ((event.clientX - rect.left) / rect.width) * 2 - 1,
+    -((event.clientY - rect.top) / rect.height) * 2 + 1
+  );
+
+  const raycaster = new THREE.Raycaster();
+  raycaster.setFromCamera(pointer, camera);
+
+  const hits = raycaster.intersectObjects(placedObjects, true);
+
+  if (!hits.length) {
+    selectObject(null);
+    return;
+  }
+
+  let target = hits[0].object;
+
+  while (target.parent && !placedObjects.includes(target)) {
+    target = target.parent;
+  }
+
+  selectObject(target);
+}
+
+function moveSelected(direction) {
+  if (!selectedObject) {
+    showToast("이동할 제품을 선택하세요.");
+    return;
+  }
+
+
+  if (photoPreviewMode && calibration.mode === "wall" && calibration.applied) {
+    const step = 0.02;
+    if (direction === "left") calibration.wallU -= step;
+    if (direction === "right") calibration.wallU += step;
+    if (direction === "forward") calibration.wallV -= step;
+    if (direction === "back") calibration.wallV += step;
+    applyReferenceCalibration(true, false);
+    return;
+  }
+
+  const before = snapshotScene();
+  const step = 0.05;
+  const forward = new THREE.Vector3();
+  camera.getWorldDirection(forward);
+  forward.y = 0;
+
+  if (forward.lengthSq() < 0.0001) {
+    forward.set(0, 0, -1);
+  } else {
+    forward.normalize();
+  }
+
+  const right = new THREE.Vector3().crossVectors(forward, new THREE.Vector3(0, 1, 0)).normalize();
+  const delta = new THREE.Vector3();
+
+  if (direction === "forward") {
+    delta.copy(forward).multiplyScalar(step);
+  } else if (direction === "back") {
+    delta.copy(forward).multiplyScalar(-step);
+  } else if (direction === "left") {
+    delta.copy(right).multiplyScalar(-step);
+  } else if (direction === "right") {
+    delta.copy(right).multiplyScalar(step);
+  }
+
+  selectedObject.position.add(delta);
+  updateDimensionOverlay();
+  recordHistory(before);
+}
+
+function rotateSelected(rad, silent = false, axis = "y") {
+  if (!selectedObject) {
+    if (!silent) {
+      showToast("회전할 제품을 선택하세요.");
+    }
+    return;
+  }
+
+  if (axis === "x") {
+    const tiltLimit = THREE.MathUtils.degToRad(60);
+    selectedObject.rotation.x = THREE.MathUtils.clamp(
+      selectedObject.rotation.x + rad,
+      -tiltLimit,
+      tiltLimit
+    );
+  } else {
+    selectedObject.rotation.y += rad;
+  }
+  updateDimensionOverlay();
+}
+
+function heightSelected(dy) {
+  if (!selectedObject) {
+    showToast("높이를 조정할 제품을 선택하세요.");
+    return;
+  }
+
+
+  if (photoPreviewMode && calibration.mode === "wall" && calibration.applied) {
+    calibration.wallV -= dy * 0.4;
+    applyReferenceCalibration(true, false);
+    return;
+  }
+
+  const before = snapshotScene();
+  selectedObject.position.y += dy;
+  updateDimensionOverlay();
+  recordHistory(before);
+}
+
+function updateDimensionOverlay() {
+  clearDimensionOverlay();
+
+  if (!dom.dimensionToggle?.checked || !selectedObject) return;
+
+  const box = new THREE.Box3().setFromObject(selectedObject);
+  const size = box.getSize(new THREE.Vector3());
+  const min = box.min;
+  const max = box.max;
+  const pad = Math.max(Math.max(size.x, size.y, size.z) * 0.06, 0.045);
+  const y = min.y + pad * 0.35;
+  const width = size.x;
+  const height = size.y;
+  const depth = size.z;
+
+  dimensionGroup = new THREE.Group();
+  dimensionGroup.name = "Dimension overlay";
+  dimensionGroup.renderOrder = 200;
+
+  const x0 = min.x;
+  const x1 = max.x;
+  const z0 = min.z;
+  const z1 = max.z;
+  const rightX = max.x + pad;
+  const frontZ = max.z + pad;
+
+  addDimensionLine(
+    new THREE.Vector3(x0, y, frontZ),
+    new THREE.Vector3(x1, y, frontZ),
+    formatMm(width),
+    new THREE.Vector3((x0 + x1) / 2, y + pad * 0.55, frontZ)
+  );
+  addDimensionLine(
+    new THREE.Vector3(rightX, min.y, z1),
+    new THREE.Vector3(rightX, max.y, z1),
+    formatMm(height),
+    new THREE.Vector3(rightX + pad * 0.55, (min.y + max.y) / 2, z1)
+  );
+  addDimensionLine(
+    new THREE.Vector3(rightX, y, z0),
+    new THREE.Vector3(rightX, y, z1),
+    formatMm(depth),
+    new THREE.Vector3(rightX + pad * 0.55, y + pad * 0.55, (z0 + z1) / 2)
+  );
+
+  scene.add(dimensionGroup);
+}
+
+function clearDimensionOverlay() {
+  if (!dimensionGroup) return;
+
+  scene.remove(dimensionGroup);
+  dimensionGroup.traverse((child) => {
+    child.geometry?.dispose?.();
+    child.material?.map?.dispose?.();
+    child.material?.dispose?.();
+  });
+  dimensionGroup = null;
+}
+
+function addDimensionLine(start, end, label, labelPosition) {
+  const material = new THREE.LineBasicMaterial({
+    color: DIMENSION_COLOR,
+    depthTest: false,
+    transparent: true,
+    opacity: 0.95
+  });
+  const geometry = new THREE.BufferGeometry().setFromPoints([start, end]);
+  const line = new THREE.Line(geometry, material);
+  line.renderOrder = 200;
+  dimensionGroup.add(line);
+
+  const tickSize = Math.max(start.distanceTo(end) * 0.025, 0.035);
+  addTick(start, end, tickSize);
+  addTick(end, start, tickSize);
+  dimensionGroup.add(createTextSprite(label, labelPosition));
+}
+
+function addTick(point, toward, size) {
+  const dir = toward.clone().sub(point).normalize();
+  const up = new THREE.Vector3(0, 1, 0);
+  const side = new THREE.Vector3().crossVectors(dir, up);
+  if (side.lengthSq() < 0.0001) side.set(1, 0, 0);
+  side.normalize().multiplyScalar(size);
+
+  const geometry = new THREE.BufferGeometry().setFromPoints([
+    point.clone().sub(side),
+    point.clone().add(side)
+  ]);
+  const line = new THREE.Line(
+    geometry,
+    new THREE.LineBasicMaterial({
+      color: DIMENSION_COLOR,
+      depthTest: false,
+      transparent: true,
+      opacity: 0.95
+    })
+  );
+  line.renderOrder = 200;
+  dimensionGroup.add(line);
+}
+
+function createTextSprite(text, position) {
+  const canvas = document.createElement("canvas");
+  canvas.width = 512;
+  canvas.height = 160;
+  const ctx = canvas.getContext("2d");
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  ctx.fillStyle = "rgba(0, 0, 0, 0.72)";
+  ctx.strokeStyle = "rgba(56, 189, 248, 0.95)";
+  ctx.lineWidth = 6;
+  roundRect(ctx, 18, 30, 476, 92, 28);
+  ctx.fill();
+  ctx.stroke();
+  ctx.fillStyle = "#e0f7ff";
+  ctx.font = "700 44px system-ui, sans-serif";
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+  ctx.fillText(text, 256, 78);
+
+  const texture = new THREE.CanvasTexture(canvas);
+  texture.colorSpace = THREE.SRGBColorSpace;
+  const sprite = new THREE.Sprite(new THREE.SpriteMaterial({
+    map: texture,
+    depthTest: false,
+    transparent: true
+  }));
+  sprite.position.copy(position);
+  sprite.scale.set(0.34, 0.106, 1);
+  sprite.renderOrder = 201;
+  return sprite;
+}
+
+function roundRect(ctx, x, y, width, height, radius) {
+  ctx.beginPath();
+  ctx.moveTo(x + radius, y);
+  ctx.lineTo(x + width - radius, y);
+  ctx.quadraticCurveTo(x + width, y, x + width, y + radius);
+  ctx.lineTo(x + width, y + height - radius);
+  ctx.quadraticCurveTo(x + width, y + height, x + width - radius, y + height);
+  ctx.lineTo(x + radius, y + height);
+  ctx.quadraticCurveTo(x, y + height, x, y + height - radius);
+  ctx.lineTo(x, y + radius);
+  ctx.quadraticCurveTo(x, y, x + radius, y);
+  ctx.closePath();
+}
+
+function formatMm(valueMeters) {
+  return `${Math.round(valueMeters * 1000)}mm`;
+}
+
+function clearAll() {
+  if (!placedObjects.length) {
+    showToast("삭제할 제품이 없습니다.");
+    return;
+  }
+
+  if (!confirm("배치된 제품을 모두 삭제할까요?")) {
+    return;
+  }
+
+  const before = snapshotScene();
+  clearPlacedObjects();
+  selectObject(null);
+  recordHistory(before);
+  showToast("전체 삭제 완료");
+}
+
+function clearPlacedObjects() {
+  clearDimensionOverlay();
+
+  for (const obj of placedObjects) {
+    scene.remove(obj);
+  }
+
+  placedObjects = [];
+}
+
+function snapshotScene() {
+  return placedObjects.map((obj) => ({
+    productId: obj.userData.productId,
+    productName: obj.userData.productName,
+    position: obj.position.toArray(),
+    quaternion: obj.quaternion.toArray(),
+    scale: obj.scale.toArray()
+  }));
+}
+
+function recordHistory(before) {
+  if (isRestoringHistory || !before) return;
+
+  const after = snapshotScene();
+
+  if (JSON.stringify(before) === JSON.stringify(after)) {
+    return;
+  }
+
+  historyStack.push(before);
+
+  if (historyStack.length > 50) {
+    historyStack.shift();
+  }
+
+  redoStack = [];
+  updateHistoryButtons();
+}
+
+async function undoLastAction() {
+  if (!historyStack.length || isRestoringHistory) {
+    showToast("취소할 작업이 없습니다.");
+    return;
+  }
+
+  const current = snapshotScene();
+  const previous = historyStack.pop();
+  redoStack.push(current);
+  await restoreScene(previous);
+  updateHistoryButtons();
+  showToast("이전 작업으로 되돌렸습니다.");
+}
+
+async function redoLastAction() {
+  if (!redoStack.length || isRestoringHistory) {
+    showToast("복구할 작업이 없습니다.");
+    return;
+  }
+
+  const current = snapshotScene();
+  const next = redoStack.pop();
+  historyStack.push(current);
+  await restoreScene(next);
+  updateHistoryButtons();
+  showToast("작업을 다시 적용했습니다.");
+}
+
+async function restoreScene(snapshot) {
+  isRestoringHistory = true;
+
+  try {
+    clearPlacedObjects();
+
+    for (const item of snapshot) {
+      const product = products.find((p) => p.id === item.productId);
+
+      if (!product) continue;
+
+      const model = await loadModel(product);
+      model.position.fromArray(item.position);
+      model.quaternion.fromArray(item.quaternion);
+      model.scale.fromArray(item.scale);
+      const baseScale = getBaseScale(model);
+      model.userData.userScale = model.scale.x / baseScale.x;
+      model.userData.productId = item.productId;
+      model.userData.productName = item.productName || product.name;
+
+      scene.add(model);
+      placedObjects.push(model);
+    }
+
+    selectObject(placedObjects[placedObjects.length - 1] || null);
+  } finally {
+    isRestoringHistory = false;
+  }
+}
+
+function updateHistoryButtons() {
+  if (dom.undoBtn) {
+    dom.undoBtn.disabled = !historyStack.length;
+  }
+
+  if (dom.redoBtn) {
+    dom.redoBtn.disabled = !redoStack.length;
+  }
+}
+
+async function captureScreen() {
+  if (isArSessionActive()) {
+    showPhoneScreenshotGuide();
+    return;
+  }
+
+  try {
+    const url = photoPreviewMode && photoPreviewObjectUrl
+      ? await createPhotoCompositeDataUrl()
+      : renderer.domElement.toDataURL("image/png");
+    const blob = dataUrlToBlob(url);
+    const file = new File([blob], `sysmate-ar-${Date.now()}.png`, { type: "image/png" });
+
+    const img = document.createElement("img");
+    img.src = url;
+    img.addEventListener("click", () => {
+      const win = window.open();
+      win.document.write(`<img src="${url}" style="max-width:100%">`);
+    });
+
+    dom.captureStrip.prepend(img);
+
+    if (navigator.canShare?.({ files: [file] })) {
+      await navigator.share({
+        files: [file],
+        title: "SYSMATE AR 화면"
+      });
+      showToast("화면저장 공유창을 열었습니다.");
+    } else {
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = file.name;
+      link.click();
+      showToast("화면저장 완료");
+    }
+
+    hideCapturePrompt();
+  } catch (err) {
+    console.error(err);
+
+    if (err?.name === "AbortError") {
+      showToast("화면저장을 취소했습니다.");
+    } else {
+      showToast("캡처 실패");
+    }
+  }
+}
+
+function isArSessionActive() {
+  return Boolean(renderer?.xr?.isPresenting && !previewMode);
+}
+
+function showPhoneScreenshotGuide() {
+  alert(
+    "AR 카메라 화면은 브라우저 보안 제한 때문에 앱 내부 저장으로는 하얗게 나올 수 있습니다.\n\n" +
+    "지금 보이는 화면 그대로 저장하려면 휴대폰 자체 스크린샷을 사용해주세요.\n\n" +
+    "갤럭시: 전원 버튼 + 볼륨 아래 버튼을 동시에 짧게 누르기"
+  );
+  showToast("전원 + 볼륨 아래 버튼으로 화면을 캡처하세요.");
+}
+
+function dataUrlToBlob(dataUrl) {
+  const [header, data] = dataUrl.split(",");
+  const mime = header.match(/data:(.*?);/)?.[1] || "image/png";
+  const binary = atob(data);
+  const bytes = new Uint8Array(binary.length);
+
+  for (let i = 0; i < binary.length; i++) {
+    bytes[i] = binary.charCodeAt(i);
+  }
+
+  return new Blob([bytes], { type: mime });
+}
+
+async function createPhotoCompositeDataUrl() {
+  const canvas = document.createElement("canvas");
+  const width = renderer.domElement.width;
+  const height = renderer.domElement.height;
+  canvas.width = width;
+  canvas.height = height;
+
+  const ctx = canvas.getContext("2d");
+  const bg = await loadImage(photoPreviewObjectUrl);
+  drawImageCover(ctx, bg, width, height);
+  ctx.drawImage(renderer.domElement, 0, 0, width, height);
+  return canvas.toDataURL("image/png");
+}
+
+function loadImage(src) {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.onload = () => resolve(img);
+    img.onerror = reject;
+    img.src = src;
+  });
+}
+
+function drawImageCover(ctx, img, width, height) {
+  const scale = Math.max(width / img.naturalWidth, height / img.naturalHeight);
+  const drawWidth = img.naturalWidth * scale;
+  const drawHeight = img.naturalHeight * scale;
+  const x = (width - drawWidth) / 2;
+  const y = (height - drawHeight) / 2;
+  ctx.drawImage(img, x, y, drawWidth, drawHeight);
+}
+
+function showCapturePrompt() {
+  if (dom.captureHint?.querySelector("span")) {
+    dom.captureHint.querySelector("span").textContent =
+      "캡처: 휴대폰 전원 버튼 + 볼륨 아래 버튼";
+  }
+
+  if (dom.captureHint) {
+    dom.captureHint.classList.add("show");
+  }
+
+  clearTimeout(captureHintTimer);
+  captureHintTimer = setTimeout(hideCapturePrompt, CAPTURE_HINT_MS);
+}
+
+function hideCapturePrompt() {
+  if (dom.captureHint) {
+    dom.captureHint.classList.remove("show");
+  }
+
+  clearTimeout(captureHintTimer);
+  captureHintTimer = null;
+}
+
+function animate() {
+  renderer.setAnimationLoop(render);
+}
+
+function render(timestamp, frame) {
+  if (previewMode) {
+    orbitControls.update();
+  }
+
+  updateDynamicTextures(timestamp);
+
+  if (frame) {
+    const session = renderer.xr.getSession();
+
+    if (!hitTestSourceRequested) {
+      getHitTestReferenceSpace(session).then((referenceSpace) => {
+        session.requestHitTestSource({ space: referenceSpace }).then((source) => {
+          hitTestSource = source;
+        });
+      }).catch((err) => {
+        console.error("Hit-test reference space failed:", err);
+        showToast("바닥 인식 기준을 만들지 못했습니다.");
+      });
+
+      session.addEventListener("end", () => {
+        hitTestSourceRequested = false;
+        hitTestSource = null;
+      });
+
+      hitTestSourceRequested = true;
+    }
+
+    if (hitTestSource) {
+      const referenceSpace = renderer.xr.getReferenceSpace();
+      const hitTestResults = frame.getHitTestResults(hitTestSource);
+
+      if (hitTestResults.length) {
+        const hit = hitTestResults[0];
+        const pose = hit.getPose(referenceSpace);
+
+        reticleObject.visible = true;
+        reticleObject.matrix.fromArray(pose.transform.matrix);
+        dom.reticle.style.display = "block";
+      } else {
+        reticleObject.visible = false;
+        dom.reticle.style.display = "none";
+      }
+    }
+  }
+
+  renderer.render(scene, camera);
+}
+
+async function getHitTestReferenceSpace(session) {
+  try {
+    return await session.requestReferenceSpace("viewer");
+  } catch (err) {
+    console.warn("Viewer reference space unavailable. Falling back to AR reference space.", err);
+    return session.requestReferenceSpace(arReferenceSpaceType);
+  }
+}
+
+function onResize() {
+  renderer.setPixelRatio(window.devicePixelRatio);
+  renderer.setSize(window.innerWidth, window.innerHeight);
+  camera.aspect = window.innerWidth / window.innerHeight;
+  camera.updateProjectionMatrix();
+  renderCalibrationOverlay();
+
+  if (calibration.applied && photoPreviewMode && selectedObject) {
+    applyReferenceCalibration(false, false);
+  }
+}
+
+function showToast(message) {
+  dom.toast.textContent = message;
+  dom.toast.style.display = "block";
+
+  clearTimeout(showToast.timer);
+  showToast.timer = setTimeout(() => {
+    dom.toast.style.display = "none";
+  }, 1800);
+}
+
+function setLoading(show, message = "모델 불러오는 중...") {
+  if (!dom.loadingOverlay) return;
+
+  if (dom.loadingText) {
+    dom.loadingText.textContent = message;
+  }
+
+  dom.loadingOverlay.classList.toggle("show", show);
+
+  if (dom.loadBtn) dom.loadBtn.disabled = show;
+  if (dom.placeBtn) dom.placeBtn.disabled = show;
+  if (dom.productSelect) dom.productSelect.disabled = show;
+}
+import * as THREE from "three";
+import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
+import { OrbitControls } from "three/addons/controls/OrbitControls.js";
+
+const $ = (id) => document.getElementById(id);
+
+const dom = {
+  startScreen: $("startScreen"),
+  startBtnBig: $("startBtnBig"),
+  previewBtnBig: $("previewBtnBig"),
+  photoPreviewBg: $("photoPreviewBg"),
+  photoInput: $("photoInput"),
+  photoPreviewHint: $("photoPreviewHint"),
+  topBar: $("topBar"),
+  uiFoldBtn: $("uiFoldBtn"),
+  productSelect: $("productSelect"),
+  loadBtn: $("loadBtn"),
+  placeBtn: $("placeBtn"),
+  savePhotoBtn: $("savePhotoBtn"),
+  undoBtn: $("undoBtn"),
+  redoBtn: $("redoBtn"),
+  clearBtn: $("clearBtn"),
+  lockScale: $("lockScale"),
+  scaleRange: $("scaleRange"),
+  scaleValue: $("scaleValue"),
+  dimensionToggle: $("dimensionToggle"),
+  reticle: $("reticle"),
+  editPanel: $("editPanel"),
+  editHeader: $("editHeader"),
+  editTitle: $("editTitle"),
+  editToggleBtn: $("editToggleBtn"),
+  editControls: $("editControls"),
+  toast: $("toast"),
+  captureHint: $("captureHint"),
+  captureHintBtn: $("captureHintBtn"),
+  captureStrip: $("captureStrip"),
+  loadingOverlay: $("loadingOverlay"),
+  loadingText: $("loadingText"),
+  calibrationLayer: $("calibrationLayer"),
+  calibrationSvg: $("calibrationSvg"),
   calibrationLine: $("calibrationLine"),
   calibrationPanel: $("calibrationPanel"),
   calibrationBody: $("calibrationBody"),
