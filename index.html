@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, user-scalable=no" />
   <title>SYSMATE AR 제품 배치</title>
-  <link rel="stylesheet" href="css/style.css?v=20260713-wall1" />
+  <link rel="stylesheet" href="css/style.css?v=20260713-floor2" />
 </head>
 <body>
   <div id="photoPreviewBg"></div>
@@ -84,13 +84,10 @@
   <!-- 사진 기준 길이 캘리브레이션 -->
   <div id="calibrationLayer" aria-hidden="true">
     <svg id="calibrationSvg" viewBox="0 0 100 100" preserveAspectRatio="none">
-      <polygon id="calibrationPlane" points="0,0 0,0 0,0 0,0"></polygon>
       <line id="calibrationLine" x1="0" y1="0" x2="0" y2="0"></line>
     </svg>
     <button class="calibrationHandle" data-point-index="0" type="button" aria-label="기준점 1"></button>
     <button class="calibrationHandle" data-point-index="1" type="button" aria-label="기준점 2"></button>
-    <button class="calibrationHandle" data-point-index="2" type="button" aria-label="기준점 3"></button>
-    <button class="calibrationHandle" data-point-index="3" type="button" aria-label="기준점 4"></button>
   </div>
 
   <section id="calibrationPanel" aria-label="기준 길이 설정">
@@ -103,14 +100,9 @@
     </div>
 
     <div id="calibrationBody">
-      <div class="placementMode" role="group" aria-label="제품 설치 방식">
-        <button type="button" data-placement-mode="floor" class="selected">바닥형</button>
-        <button type="button" data-placement-mode="wall">벽부형</button>
-      </div>
+      <p class="calibrationGuide">기준 물체는 제품 설치 위치와 같은 평면에서 선택해 주세요.</p>
 
-      <p id="calibrationGuide" class="calibrationGuide">기준 물체는 제품 설치 위치와 같은 평면에서 선택해 주세요.</p>
-
-      <div class="calibrationPresets floorCalibrationOnly" aria-label="기준 길이 예시">
+      <div class="calibrationPresets" aria-label="기준 길이 예시">
         <button type="button" data-reference-cm="210">문 210cm</button>
         <button type="button" data-reference-cm="29.7">A4 29.7cm</button>
         <button type="button" data-reference-cm="60">타일 60cm</button>
@@ -122,27 +114,13 @@
         <button id="calibrationRepickBtn" type="button">다시 선택</button>
       </div>
 
-      <div class="calibrationRow measurementInput floorCalibrationOnly">
+      <div class="calibrationRow measurementInput">
         <label for="calibrationLength">실제 길이</label>
         <input id="calibrationLength" type="number" min="0.1" step="0.1" inputmode="decimal" value="210" />
         <select id="calibrationUnit" aria-label="기준 길이 단위">
           <option value="cm" selected>cm</option>
           <option value="mm">mm</option>
         </select>
-      </div>
-
-      <div id="wallCalibrationControls">
-        <p class="wallPointOrder">벽면 모서리를 왼쪽 위 → 오른쪽 위 → 오른쪽 아래 → 왼쪽 아래 순서로 선택하세요.</p>
-        <div class="wallSizeGrid">
-          <label>벽 가로(cm)<input id="wallWidth" type="number" min="1" step="1" value="300" inputmode="decimal" /></label>
-          <label>벽 세로(cm)<input id="wallHeight" type="number" min="1" step="1" value="240" inputmode="decimal" /></label>
-        </div>
-        <div class="wallPositionControls">
-          <label>좌우 위치 <span id="wallPositionXValue">50%</span></label>
-          <input id="wallPositionX" type="range" min="0" max="100" value="50" />
-          <label>설치 높이 <span id="wallPositionYValue">50%</span></label>
-          <input id="wallPositionY" type="range" min="0" max="100" value="50" />
-        </div>
       </div>
 
       <div class="calibrationRow">
@@ -221,6 +199,6 @@
   }
   </script>
 
-  <script type="module" src="js/app.js?v=20260713-wall1"></script>
+  <script type="module" src="js/app.js?v=20260713-floor2"></script>
 </body>
 </html>
