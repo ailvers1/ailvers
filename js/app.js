@@ -29,6 +29,7 @@ const dom = {
   editHeader: $("editHeader"),
   editTitle: $("editTitle"),
   editToggleBtn: $("editToggleBtn"),
+  editDoneBtn: $("editDoneBtn"),
   editControls: $("editControls"),
   toast: $("toast"),
   captureHint: $("captureHint"),
@@ -269,6 +270,7 @@ function bindEvents() {
   safeClick("undoBtn", undoLastAction);
   safeClick("redoBtn", redoLastAction);
   safeClick("editToggleBtn", toggleEditPanel);
+  safeClick("editDoneBtn", completeEdit);
   safeClick("uiFoldBtn", toggleUiFold);
   safeClick("captureHintBtn", captureScreen);
 
@@ -947,10 +949,10 @@ async function placeCurrentProduct() {
 
     scene.add(model);
     placedObjects.push(model);
-    selectObject(model);
     recordHistory(before);
     uiFolded = true;
     updateUiFoldState();
+    selectObject(model);
     if (!uiFolded) {
       showCapturePrompt();
     }
@@ -1424,7 +1426,7 @@ function selectObject(obj) {
 
   dom.editPanel.classList.add("show");
   dom.editTitle.textContent = obj.userData.productName || "선택된 제품";
-  editPanelExpanded = false;
+  editPanelExpanded = !photoPreviewMode;
   updateEditPanelState();
 
   const scalePct = Math.round(getUserScale(obj) * 100);
@@ -1790,6 +1792,13 @@ function toggleEditPanel() {
 
   editPanelExpanded = !editPanelExpanded;
   updateEditPanelState();
+}
+
+function completeEdit() {
+  if (!selectedObject) return;
+
+  selectObject(null);
+  showToast("제품 조작 완료. 제품을 다시 누르면 조작 패널이 열립니다.");
 }
 
 function toggleUiFold() {
