@@ -4,6 +4,232 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, user-scalable=no" />
   <title>SYSMATE AR 제품 배치</title>
+  <link rel="stylesheet" href="css/style.css?v=20260713-wall1" />
+</head>
+<body>
+  <div id="photoPreviewBg"></div>
+  <input id="photoInput" type="file" accept="image/*" />
+  <div id="photoPreviewHint">
+    <span>사진 위에서 한 손가락 이동, 두 손가락 확대/회전</span>
+  </div>
+
+  <!-- 시작 화면 -->
+  <div id="startScreen">
+    <div class="startShell">
+      <div class="startBrand">
+        <img src="assets/sysmate-logo.png" alt="SYSMATE" />
+      </div>
+
+      <div class="startCopy">
+        <span class="startEyebrow">AR PRODUCT PLACEMENT</span>
+        <h1>제품 미리보기</h1>
+        <p>키오스크 제품을 실제 공간 또는 사진 위에 올려 크기와 배치를 빠르게 확인하세요.</p>
+      </div>
+
+      <div class="startPreview">
+        <img
+          src="assets/placement-hero.svg"
+          alt="매장 공간에 키오스크를 실제 크기로 배치한 예시"
+          width="1200"
+          height="1200"
+          loading="eager"
+          decoding="async"
+        />
+      </div>
+
+      <div class="startActions">
+        <button id="startBtnBig">AR 시작</button>
+        <button id="previewBtnBig" class="secondary">사진 불러오기 / 3D 배치</button>
+      </div>
+
+      <div class="notice">
+        권장 환경: Android Chrome / ARCore 지원 기기
+      </div>
+    </div>
+  </div>
+
+  <!-- 상단 컨트롤 -->
+  <div id="topBar">
+    <button id="uiFoldBtn" type="button">화면 접기</button>
+    <div class="row">
+      <label for="productSelect">제품 선택</label>
+      <select id="productSelect"></select>
+      <button id="loadBtn">모델 준비</button>
+    </div>
+
+    <div class="row">
+      <label>
+        <input type="checkbox" id="lockScale" checked />
+        실측 고정
+      </label>
+
+      <span>스케일</span>
+      <input id="scaleRange" type="range" min="50" max="150" value="100" disabled />
+      <span id="scaleValue">100%</span>
+      <label>
+        <input type="checkbox" id="dimensionToggle" />
+        치수 표시
+      </label>
+    </div>
+
+    <div class="row">
+      <button id="placeBtn">📍 배치</button>
+      <button id="savePhotoBtn">저장</button>
+      <button id="undoBtn">↶ 취소</button>
+      <button id="redoBtn">↷ 복구</button>
+      <button id="clearBtn">🗑️ 전체삭제</button>
+    </div>
+  </div>
+
+  <!-- 사진 기준 길이 캘리브레이션 -->
+  <div id="calibrationLayer" aria-hidden="true">
+    <svg id="calibrationSvg" viewBox="0 0 100 100" preserveAspectRatio="none">
+      <polygon id="calibrationPlane" points="0,0 0,0 0,0 0,0"></polygon>
+      <line id="calibrationLine" x1="0" y1="0" x2="0" y2="0"></line>
+    </svg>
+    <button class="calibrationHandle" data-point-index="0" type="button" aria-label="기준점 1"></button>
+    <button class="calibrationHandle" data-point-index="1" type="button" aria-label="기준점 2"></button>
+    <button class="calibrationHandle" data-point-index="2" type="button" aria-label="기준점 3"></button>
+    <button class="calibrationHandle" data-point-index="3" type="button" aria-label="기준점 4"></button>
+  </div>
+
+  <section id="calibrationPanel" aria-label="기준 길이 설정">
+    <div class="calibrationHeader">
+      <div>
+        <strong>기준 길이 설정</strong>
+        <span id="calibrationSummary">기준점이 설정되지 않았습니다.</span>
+      </div>
+      <button id="calibrationToggleBtn" type="button">열기</button>
+    </div>
+
+    <div id="calibrationBody">
+      <div class="placementMode" role="group" aria-label="제품 설치 방식">
+        <button type="button" data-placement-mode="floor" class="selected">바닥형</button>
+        <button type="button" data-placement-mode="wall">벽부형</button>
+      </div>
+
+      <p id="calibrationGuide" class="calibrationGuide">기준 물체는 제품 설치 위치와 같은 평면에서 선택해 주세요.</p>
+
+      <div class="calibrationPresets floorCalibrationOnly" aria-label="기준 길이 예시">
+        <button type="button" data-reference-cm="210">문 210cm</button>
+        <button type="button" data-reference-cm="29.7">A4 29.7cm</button>
+        <button type="button" data-reference-cm="60">타일 60cm</button>
+        <button type="button" data-reference-cm="72">책상 72cm</button>
+      </div>
+
+      <div class="calibrationRow">
+        <button id="calibrationPickBtn" type="button">두 점 선택</button>
+        <button id="calibrationRepickBtn" type="button">다시 선택</button>
+      </div>
+
+      <div class="calibrationRow measurementInput floorCalibrationOnly">
+        <label for="calibrationLength">실제 길이</label>
+        <input id="calibrationLength" type="number" min="0.1" step="0.1" inputmode="decimal" value="210" />
+        <select id="calibrationUnit" aria-label="기준 길이 단위">
+          <option value="cm" selected>cm</option>
+          <option value="mm">mm</option>
+        </select>
+      </div>
+
+      <div id="wallCalibrationControls">
+        <p class="wallPointOrder">벽면 모서리를 왼쪽 위 → 오른쪽 위 → 오른쪽 아래 → 왼쪽 아래 순서로 선택하세요.</p>
+        <div class="wallSizeGrid">
+          <label>벽 가로(cm)<input id="wallWidth" type="number" min="1" step="1" value="300" inputmode="decimal" /></label>
+          <label>벽 세로(cm)<input id="wallHeight" type="number" min="1" step="1" value="240" inputmode="decimal" /></label>
+        </div>
+        <div class="wallPositionControls">
+          <label>좌우 위치 <span id="wallPositionXValue">50%</span></label>
+          <input id="wallPositionX" type="range" min="0" max="100" value="50" />
+          <label>설치 높이 <span id="wallPositionYValue">50%</span></label>
+          <input id="wallPositionY" type="range" min="0" max="100" value="50" />
+        </div>
+      </div>
+
+      <div class="calibrationRow">
+        <button id="calibrationApplyBtn" type="button" class="primary">기준 적용</button>
+        <button id="calibrationResetBtn" type="button">초기화</button>
+      </div>
+
+      <div id="calibrationReadout" aria-live="polite">
+        <span>화면 길이: -</span>
+        <span>환산값: -</span>
+        <span>제품 높이: -</span>
+      </div>
+
+      <div class="fineTune">
+        <div class="fineTuneLabel">
+          <label for="calibrationFineTune">미세 보정</label>
+          <span id="calibrationFineTuneValue">100%</span>
+        </div>
+        <input id="calibrationFineTune" type="range" min="70" max="130" value="100" />
+        <button id="calibrationRestoreBtn" type="button">자동 계산값으로 되돌리기</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- 선택 제품 조작 패널 -->
+  <div id="editPanel">
+    <div id="editHeader">
+      <div id="editTitle">선택된 제품 없음</div>
+      <button id="editToggleBtn">조작</button>
+    </div>
+
+    <div id="editControls">
+      <div class="pad">
+        <button id="moveForward">▲</button>
+        <button id="moveLeft">◀</button>
+        <button id="moveRight">▶</button>
+        <button id="moveBack">▼</button>
+      </div>
+
+      <div class="row small">
+        <button id="rotateLeft">⟲ 회전</button>
+        <button id="rotateRight">회전 ⟳</button>
+      </div>
+
+      <div class="row small tiltControls">
+        <button id="tiltUp">↑ 위로 기울임</button>
+        <button id="tiltDown">↓ 아래로 기울임</button>
+      </div>
+
+      <div class="row small">
+        <button id="heightDown">높이 -</button>
+        <button id="heightUp">높이 +</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="reticle"></div>
+  <div id="toast"></div>
+  <div id="captureHint">
+    <span>캡처: 휴대폰 전원 버튼 + 볼륨 아래 버튼</span>
+  </div>
+  <div id="captureStrip"></div>
+
+  <div id="loadingOverlay">
+    <div class="loader"></div>
+    <div id="loadingText">모델 불러오는 중...</div>
+  </div>
+
+  <!-- 중요: importmap은 app.js보다 위에 있어야 함 -->
+  <script type="importmap">
+  {
+    "imports": {
+      "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+      "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+    }
+  }
+  </script>
+
+  <script type="module" src="js/app.js?v=20260713-wall1"></script>
+</body>
+</html>
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, user-scalable=no" />
+  <title>SYSMATE AR 제품 배치</title>
   <link rel="stylesheet" href="css/style.css?v=20260713-hero2" />
 </head>
 <body>
