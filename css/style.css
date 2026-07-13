@@ -83,43 +83,25 @@ input {
   position: fixed;
   inset: 0;
   z-index: 100;
-  display: grid;
-  place-items: center;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   overflow: hidden;
   background:
-    radial-gradient(circle at 8% 18%, rgba(255,255,255,.62), transparent 26%),
-    linear-gradient(135deg, #f3efe3, #e9e3d2);
+    linear-gradient(180deg, rgba(255,255,255,.72), rgba(255,255,255,.22)),
+    radial-gradient(circle at 22% 12%, rgba(157,205,51,.16), transparent 30%),
+    linear-gradient(135deg, #f6f2e8, #ebe4d4);
   color: #061e55;
   padding: clamp(22px, 6vw, 56px);
 }
 
-#startScreen::before,
-#startScreen::after {
+#startScreen::before {
   content: "";
   position: absolute;
+  inset: 22px;
+  border: 1px solid rgba(6,30,85,.08);
+  border-radius: 28px;
   pointer-events: none;
-}
-
-#startScreen::before {
-  right: clamp(-130px, -8vw, -52px);
-  top: clamp(42px, 10vw, 96px);
-  width: min(52vw, 520px);
-  height: min(68vh, 560px);
-  border-radius: 20px;
-  background: #245a94;
-  transform: rotate(8deg);
-  box-shadow: 0 24px 60px rgba(6,30,85,.18);
-}
-
-#startScreen::after {
-  right: clamp(-70px, 4vw, 52px);
-  top: clamp(108px, 18vw, 170px);
-  width: min(42vw, 440px);
-  height: min(62vh, 510px);
-  border-radius: 18px;
-  background: #9dcd33;
-  transform: rotate(-3deg);
-  box-shadow: 0 20px 42px rgba(88,115,23,.16);
 }
 
 #startScreen.hidden {
@@ -127,19 +109,21 @@ input {
 }
 
 .startShell {
-  width: min(520px, 100%);
+  width: min(1040px, 100%);
   position: relative;
   z-index: 1;
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: 28px;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(280px, 420px);
+  align-items: center;
+  column-gap: clamp(28px, 8vw, 92px);
+  row-gap: 30px;
 }
 
 .startBrand {
+  grid-column: 1 / -1;
   display: inline-flex;
   align-items: center;
-  width: min(292px, 72vw);
+  width: min(270px, 70vw);
 }
 
 .startBrand img {
@@ -152,7 +136,7 @@ input {
 .startCopy {
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 14px;
 }
 
 .startEyebrow {
@@ -165,14 +149,14 @@ input {
 #startScreen h1 {
   margin: 0;
   color: #061e55;
-  font-size: clamp(42px, 12vw, 74px);
-  line-height: .95;
+  font-size: clamp(38px, 7vw, 68px);
+  line-height: 1.05;
   font-weight: 900;
   letter-spacing: 0;
 }
 
 #startScreen p {
-  max-width: 440px;
+  max-width: 470px;
   margin: 0;
   color: rgba(6,30,85,.72);
   font-size: 16px;
@@ -186,6 +170,7 @@ input {
   gap: 10px;
   flex-wrap: wrap;
   width: 100%;
+  grid-column: 1;
 }
 
 #startBtnBig {
@@ -207,19 +192,126 @@ input {
   border: 1px solid rgba(6,30,85,.16);
   border-radius: 12px;
   padding: 14px 20px;
-  background: rgba(157,205,51,.96);
+  background: rgba(255,255,255,.76);
   color: #061e55;
   font-size: 14px;
   font-weight: 700;
-  box-shadow: 0 12px 28px rgba(88,115,23,.14);
+  box-shadow: 0 12px 28px rgba(6,30,85,.08);
 }
 
 .notice {
+  grid-column: 1;
   padding-top: 4px;
   color: rgba(6,30,85,.58);
   font-size: 12px;
   line-height: 1.5;
   font-weight: 650;
+}
+
+.startPreview {
+  grid-column: 2;
+  grid-row: 2 / span 3;
+  width: min(100%, 400px);
+  aspect-ratio: 1 / 1.05;
+  align-self: center;
+  border-radius: 28px;
+  background:
+    linear-gradient(145deg, rgba(255,255,255,.82), rgba(255,255,255,.42)),
+    linear-gradient(135deg, rgba(36,90,148,.10), rgba(157,205,51,.12));
+  border: 1px solid rgba(6,30,85,.10);
+  box-shadow: 0 28px 70px rgba(6,30,85,.16);
+  overflow: hidden;
+  position: relative;
+}
+
+.startPreview::before {
+  content: "실측 배치";
+  position: absolute;
+  left: 18px;
+  top: 18px;
+  padding: 7px 10px;
+  border-radius: 999px;
+  background: rgba(6,30,85,.92);
+  color: white;
+  font-size: 12px;
+  font-weight: 850;
+}
+
+.previewRoom {
+  position: absolute;
+  inset: 0;
+}
+
+.roomLine {
+  position: absolute;
+  background: rgba(6,30,85,.12);
+}
+
+.roomLine.floor {
+  left: 12%;
+  right: 10%;
+  bottom: 24%;
+  height: 2px;
+  transform: skewX(-18deg);
+}
+
+.roomLine.wall {
+  top: 18%;
+  bottom: 24%;
+  left: 23%;
+  width: 2px;
+}
+
+.previewKiosk {
+  position: absolute;
+  left: 43%;
+  bottom: 24%;
+  width: 31%;
+  height: 54%;
+  border-radius: 16px 16px 10px 10px;
+  background: linear-gradient(180deg, #f8fafc, #d8dde1);
+  border: 5px solid #061e55;
+  box-shadow: 18px 24px 34px rgba(6,30,85,.16);
+}
+
+.kioskScreen {
+  position: absolute;
+  left: 14%;
+  right: 14%;
+  top: 15%;
+  height: 48%;
+  border-radius: 6px;
+  background: linear-gradient(180deg, #061e55, #12376c);
+}
+
+.kioskBase {
+  position: absolute;
+  left: 27%;
+  right: 27%;
+  bottom: 10%;
+  height: 8%;
+  border-radius: 5px;
+  background: #9dcd33;
+}
+
+.measureLine {
+  position: absolute;
+  background: #9dcd33;
+  box-shadow: 0 0 0 1px rgba(6,30,85,.06);
+}
+
+.measureLine.height {
+  right: 18%;
+  bottom: 24%;
+  width: 3px;
+  height: 54%;
+}
+
+.measureLine.width {
+  left: 43%;
+  bottom: 16%;
+  width: 31%;
+  height: 3px;
 }
 
 #topBar {
@@ -605,27 +697,17 @@ body.ui-clean #editPanel.collapsed {
 
 @media (max-width: 520px) {
   #startScreen {
-    place-items: start center;
+    align-items: flex-start;
     padding-top: calc(env(safe-area-inset-top, 0px) + 34px);
   }
 
   #startScreen::before {
-    right: -168px;
-    top: 92px;
-    width: 275px;
-    height: 390px;
-    opacity: .9;
-  }
-
-  #startScreen::after {
-    right: -118px;
-    top: 154px;
-    width: 245px;
-    height: 340px;
-    opacity: .92;
+    inset: 12px;
+    border-radius: 22px;
   }
 
   .startShell {
+    grid-template-columns: 1fr;
     gap: 24px;
     min-height: calc(100dvh - env(safe-area-inset-top, 0px) - 68px);
   }
@@ -635,8 +717,21 @@ body.ui-clean #editPanel.collapsed {
   }
 
   .startActions {
+    grid-column: 1;
     align-items: stretch;
     flex-direction: column;
+  }
+
+  .startPreview {
+    grid-column: 1;
+    grid-row: auto;
+    width: min(100%, 330px);
+    justify-self: center;
+    order: 3;
+  }
+
+  .notice {
+    grid-column: 1;
   }
 
   #startBtnBig,
@@ -690,21 +785,13 @@ body.ui-clean #editPanel.collapsed {
   }
 
   #startScreen::before {
-    right: -72px;
-    top: 20px;
-    width: 300px;
-    height: 240px;
-  }
-
-  #startScreen::after {
-    right: -32px;
-    top: 62px;
-    width: 250px;
-    height: 220px;
+    inset: 10px;
+    border-radius: 20px;
   }
 
   .startShell {
-    width: min(680px, 100%);
+    width: min(760px, 100%);
+    grid-template-columns: minmax(0, 1fr) 230px;
     gap: 14px;
   }
 
@@ -718,6 +805,10 @@ body.ui-clean #editPanel.collapsed {
 
   #startScreen p {
     font-size: 14px;
+  }
+
+  .startPreview {
+    width: 220px;
   }
 
   .notice {
