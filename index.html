@@ -4,13 +4,13 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, user-scalable=no" />
   <title>SYSMATE AR 제품 배치</title>
-  <link rel="stylesheet" href="css/style.css?v=20260713-floor2" />
+  <link rel="stylesheet" href="css/style.css?v=20260713-controls1" />
 </head>
 <body>
   <div id="photoPreviewBg"></div>
   <input id="photoInput" type="file" accept="image/*" />
   <div id="photoPreviewHint">
-    <span>사진 위에서 한 손가락 이동, 두 손가락 확대/회전</span>
+    <span>이동: 드래그 · 크기: Shift+드래그 또는 우하단 핸들</span>
   </div>
 
   <!-- 시작 화면 -->
@@ -64,7 +64,7 @@
       </label>
 
       <span>스케일</span>
-      <input id="scaleRange" type="range" min="50" max="150" value="100" disabled />
+      <input id="scaleRange" type="range" min="25" max="300" value="100" disabled />
       <span id="scaleValue">100%</span>
       <label>
         <input type="checkbox" id="dimensionToggle" />
@@ -177,6 +177,17 @@
     </div>
   </div>
 
+  <div id="objectControlsOverlay" aria-hidden="true">
+    <div id="objectSelectionBox"></div>
+    <div id="objectToolbar" role="toolbar" aria-label="선택 제품 조작">
+      <button id="objectRotateHandle" type="button" aria-label="좌우 회전">↔ 회전</button>
+      <button id="objectTiltHandle" type="button" aria-label="상하 기울임">↕ 기울임</button>
+      <span id="objectTransformReadout">100% · 0°</span>
+      <button id="objectResetBtn" type="button">초기화</button>
+    </div>
+    <button id="objectScaleHandle" type="button" aria-label="제품 크기 조절">↘</button>
+  </div>
+
   <div id="reticle"></div>
   <div id="toast"></div>
   <div id="captureHint">
@@ -199,6 +210,6 @@
   }
   </script>
 
-  <script type="module" src="js/app.js?v=20260713-floor2"></script>
+  <script type="module" src="js/app.js?v=20260713-controls1"></script>
 </body>
 </html>
