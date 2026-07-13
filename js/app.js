@@ -53,6 +53,14 @@ const dom = {
   calibrationFineTune: $("calibrationFineTune"),
   calibrationFineTuneValue: $("calibrationFineTuneValue"),
   calibrationRestoreBtn: $("calibrationRestoreBtn"),
+  objectControlsOverlay: $("objectControlsOverlay"),
+  objectSelectionBox: $("objectSelectionBox"),
+  objectToolbar: $("objectToolbar"),
+  objectRotateHandle: $("objectRotateHandle"),
+  objectTiltHandle: $("objectTiltHandle"),
+  objectTransformReadout: $("objectTransformReadout"),
+  objectResetBtn: $("objectResetBtn"),
+  objectScaleHandle: $("objectScaleHandle"),
 
   moveForward: $("moveForward"),
   moveBack: $("moveBack"),
@@ -93,6 +101,10 @@ let editPanelExpanded = false;
 let uiFolded = false;
 const previewPointers = new Map();
 let previewGesture = null;
+let previewGestureBefore = null;
+let objectControlGesture = null;
+let wheelScaleBefore = null;
+let wheelScaleTimer = null;
 const calibration = {
   points: [],
   isPicking: false,
@@ -325,6 +337,15 @@ function bindEvents() {
   renderer.domElement.addEventListener("pointermove", onPhotoPreviewPointerMove);
   renderer.domElement.addEventListener("pointerup", onPhotoPreviewPointerEnd);
   renderer.domElement.addEventListener("pointercancel", onPhotoPreviewPointerEnd);
+  renderer.domElement.addEventListener("wheel", onPhotoPreviewWheel, { passive: false });
+
+  dom.objectRotateHandle?.addEventListener("pointerdown", (event) => startObjectControlGesture(event, "rotate"));
+  dom.objectTiltHandle?.addEventListener("pointerdown", (event) => startObjectControlGesture(event, "tilt"));
+  dom.objectScaleHandle?.addEventListener("pointerdown", (event) => startObjectControlGesture(event, "scale"));
+  safeClick("objectResetBtn", resetSelectedObjectTransform);
+  window.addEventListener("pointermove", onObjectControlPointerMove);
+  window.addEventListener("pointerup", endObjectControlGesture);
+  window.addEventListener("pointercancel", endObjectControlGesture);
 
   dom.photoInput?.addEventListener("change", handlePhotoPreviewFile);
   bindCalibrationEvents();
@@ -914,6 +935,8 @@ async function placeCurrentProduct() {
       model.rotation.y += THREE.MathUtils.degToRad(currentProduct.rotationYDeg);
     }
 
+    rememberDefaultRotation(model);
+
     applyUserScale(model, dom.lockScale.checked ? 1 : Number(dom.scaleRange.value) / 100);
 
     model.userData.productId = currentProduct.id;
@@ -956,6 +979,8 @@ async function placePreviewProduct() {
     if (currentProduct.rotationYDeg) {
       model.rotation.y += THREE.MathUtils.degToRad(currentProduct.rotationYDeg);
     }
+
+    rememberDefaultRotation(model);
 
     applyUserScale(model, dom.lockScale.checked ? 1 : Number(dom.scaleRange.value) / 100);
 
@@ -1019,6 +1044,14 @@ function faceModelToCamera(model) {
   }
 
   model.rotation.set(0, Math.atan2(dx, dz), 0);
+}
+
+function rememberDefaultRotation(model) {
+  model.userData.defaultRotation = {
+    x: model.rotation.x,
+    y: model.rotation.y,
+    z: model.rotation.z
+  };
 }
 
 function loadModel(product) {
@@ -1359,6 +1392,7 @@ function selectObject(obj) {
   if (!obj) {
     dom.editPanel.classList.remove("show");
     dom.editTitle.textContent = "선택된 제품 없음";
+    hideObjectControlsOverlay();
     refreshCalibrationReadout();
     return;
   }
@@ -1373,18 +1407,33 @@ function selectObject(obj) {
   dom.scaleValue.textContent = `${scalePct}%`;
   updateDimensionOverlay();
   refreshCalibrationReadout();
+  updateObjectControlsOverlay();
 }
 
 function onPhotoPreviewPointerDown(event) {
-  if (!photoPreviewMode || !selectedObject) return;
+  if (!photoPreviewMode) return;
+
+  const target = getPhotoObjectAt(event.clientX, event.clientY);
+  if (!target) {
+    selectObject(null);
+    renderer.domElement.style.cursor = "default";
+    return;
+  }
+
+  if (target !== selectedObject) selectObject(target);
 
   event.preventDefault();
+  if (previewPointers.size === 0) previewGestureBefore = snapshotScene();
   previewPointers.set(event.pointerId, {
     x: event.clientX,
     y: event.clientY,
     lastX: event.clientX,
-    lastY: event.clientY
+    lastY: event.clientY,
+    startY: event.clientY,
+    startScale: getUserScale(selectedObject),
+    mode: event.shiftKey ? "scale" : "drag"
   });
+  renderer.domElement.style.cursor = event.shiftKey ? "ns-resize" : "grabbing";
 
   try {
     renderer.domElement.setPointerCapture?.(event.pointerId);
@@ -1396,7 +1445,16 @@ function onPhotoPreviewPointerDown(event) {
 }
 
 function onPhotoPreviewPointerMove(event) {
-  if (!photoPreviewMode || !selectedObject || !previewPointers.has(event.pointerId)) return;
+  if (!photoPreviewMode) return;
+
+  if (!previewPointers.has(event.pointerId)) {
+    const hovered = getPhotoObjectAt(event.clientX, event.clientY);
+    renderer.domElement.style.cursor = hovered ? "grab" : "default";
+    dom.objectControlsOverlay?.classList.toggle("hovered", hovered === selectedObject && Boolean(selectedObject));
+    return;
+  }
+
+  if (!selectedObject) return;
 
   event.preventDefault();
   const point = previewPointers.get(event.pointerId);
@@ -1416,10 +1474,13 @@ function onPhotoPreviewPointerMove(event) {
     );
 
     selectedObject.position.copy(previewGesture.position).add(delta);
-    applyUserScale(selectedObject, nextScale);
+    applyInteractiveScale(nextScale);
     selectedObject.rotation.z = previewGesture.rotationZ + current.angle - previewGesture.angle;
-    syncScaleControl(nextScale);
     updateDimensionOverlay();
+  } else if (pointers.length === 1 && point.mode === "scale") {
+    const deltaY = point.startY - point.y;
+    const nextScale = point.startScale * Math.exp(deltaY * 0.006);
+    applyInteractiveScale(nextScale);
   } else if (pointers.length === 1) {
     const dx = point.x - point.lastX;
     const dy = point.y - point.lastY;
@@ -1429,6 +1490,7 @@ function onPhotoPreviewPointerMove(event) {
 
   point.lastX = point.x;
   point.lastY = point.y;
+  updateObjectControlsOverlay();
 }
 
 function onPhotoPreviewPointerEnd(event) {
@@ -1443,6 +1505,11 @@ function onPhotoPreviewPointerEnd(event) {
   }
 
   previewGesture = getPhotoPreviewGestureState();
+  if (!previewPointers.size) {
+    recordHistory(previewGestureBefore);
+    previewGestureBefore = null;
+    renderer.domElement.style.cursor = selectedObject ? "grab" : "default";
+  }
 }
 
 function getPhotoPreviewGestureState() {
@@ -1462,6 +1529,200 @@ function getPhotoPreviewGestureState() {
   }
 
   return { type: "drag" };
+}
+
+function getPhotoObjectAt(clientX, clientY) {
+  if (!photoPreviewMode || !placedObjects.length) return null;
+  const rect = renderer.domElement.getBoundingClientRect();
+  const pointer = new THREE.Vector2(
+    ((clientX - rect.left) / rect.width) * 2 - 1,
+    -((clientY - rect.top) / rect.height) * 2 + 1
+  );
+  const raycaster = new THREE.Raycaster();
+  raycaster.setFromCamera(pointer, camera);
+  const hits = raycaster.intersectObjects(placedObjects, true);
+  if (!hits.length) return null;
+  let target = hits[0].object;
+  while (target.parent && !placedObjects.includes(target)) target = target.parent;
+  return placedObjects.includes(target) ? target : null;
+}
+
+function applyInteractiveScale(requestedScale) {
+  if (!selectedObject) return;
+  let nextScale = THREE.MathUtils.clamp(requestedScale, 0.25, 3);
+
+  if (calibration.applied) {
+    calibration.fineTune = THREE.MathUtils.clamp(nextScale / Math.max(calibration.autoUserScale, 0.0001), 0.7, 1.3);
+    nextScale = calibration.autoUserScale * calibration.fineTune;
+    if (dom.calibrationFineTune) dom.calibrationFineTune.value = String(Math.round(calibration.fineTune * 100));
+    if (dom.calibrationFineTuneValue) dom.calibrationFineTuneValue.textContent = `${Math.round(calibration.fineTune * 100)}%`;
+  }
+
+  applyUserScale(selectedObject, nextScale);
+  syncScaleControl(nextScale);
+  updateDimensionOverlay();
+  updateObjectControlsOverlay();
+}
+
+function onPhotoPreviewWheel(event) {
+  if (!photoPreviewMode || !selectedObject || !event.altKey) return;
+  if (!getPhotoObjectAt(event.clientX, event.clientY)) return;
+  event.preventDefault();
+  if (!wheelScaleBefore) wheelScaleBefore = snapshotScene();
+  const nextScale = getUserScale(selectedObject) * Math.exp(-event.deltaY * 0.0015);
+  applyInteractiveScale(nextScale);
+  clearTimeout(wheelScaleTimer);
+  wheelScaleTimer = setTimeout(() => {
+    recordHistory(wheelScaleBefore);
+    wheelScaleBefore = null;
+  }, 220);
+}
+
+function startObjectControlGesture(event, type) {
+  if (!photoPreviewMode || !selectedObject) return;
+  event.preventDefault();
+  event.stopPropagation();
+  objectControlGesture = {
+    type,
+    pointerId: event.pointerId,
+    startX: event.clientX,
+    startY: event.clientY,
+    startScale: getUserScale(selectedObject),
+    startRotationX: selectedObject.rotation.x,
+    startRotationY: selectedObject.rotation.y,
+    before: snapshotScene()
+  };
+  try {
+    event.currentTarget.setPointerCapture?.(event.pointerId);
+  } catch {
+    // Pointer capture is optional; window listeners continue the gesture.
+  }
+}
+
+function onObjectControlPointerMove(event) {
+  if (!objectControlGesture || event.pointerId !== objectControlGesture.pointerId || !selectedObject) return;
+  event.preventDefault();
+  const dx = event.clientX - objectControlGesture.startX;
+  const dy = event.clientY - objectControlGesture.startY;
+
+  if (objectControlGesture.type === "rotate") {
+    selectedObject.rotation.y = objectControlGesture.startRotationY + dx * 0.012;
+  } else if (objectControlGesture.type === "tilt") {
+    const tiltLimit = THREE.MathUtils.degToRad(60);
+    selectedObject.rotation.x = THREE.MathUtils.clamp(
+      objectControlGesture.startRotationX - dy * 0.01,
+      -tiltLimit,
+      tiltLimit
+    );
+  } else if (objectControlGesture.type === "scale") {
+    applyInteractiveScale(objectControlGesture.startScale * Math.exp((dx - dy) * 0.005));
+  }
+
+  updateDimensionOverlay();
+  updateObjectControlsOverlay();
+}
+
+function endObjectControlGesture(event) {
+  if (!objectControlGesture || event.pointerId !== objectControlGesture.pointerId) return;
+  recordHistory(objectControlGesture.before);
+  objectControlGesture = null;
+}
+
+function resetSelectedObjectTransform() {
+  if (!photoPreviewMode || !selectedObject) return;
+  const before = snapshotScene();
+  const rotation = selectedObject.userData.defaultRotation || { x: 0, y: 0, z: 0 };
+  selectedObject.rotation.set(rotation.x, rotation.y, rotation.z);
+
+  if (calibration.applied) {
+    calibration.fineTune = 1;
+    if (dom.calibrationFineTune) dom.calibrationFineTune.value = "100";
+    if (dom.calibrationFineTuneValue) dom.calibrationFineTuneValue.textContent = "100%";
+    applyReferenceCalibration(false, false);
+  } else {
+    applyUserScale(selectedObject, 1);
+    syncScaleControl(1);
+  }
+
+  updateDimensionOverlay();
+  updateObjectControlsOverlay();
+  recordHistory(before);
+  showToast("제품 각도와 크기를 초기화했습니다.");
+}
+
+function updateObjectControlsOverlay() {
+  if (!dom.objectControlsOverlay || !photoPreviewMode || !selectedObject || !camera) {
+    hideObjectControlsOverlay();
+    return;
+  }
+
+  const box = new THREE.Box3().setFromObject(selectedObject);
+  if (box.isEmpty()) {
+    hideObjectControlsOverlay();
+    return;
+  }
+
+  const corners = [];
+  for (const x of [box.min.x, box.max.x]) {
+    for (const y of [box.min.y, box.max.y]) {
+      for (const z of [box.min.z, box.max.z]) corners.push(new THREE.Vector3(x, y, z));
+    }
+  }
+
+  let minX = Infinity;
+  let minY = Infinity;
+  let maxX = -Infinity;
+  let maxY = -Infinity;
+  for (const corner of corners) {
+    corner.project(camera);
+    const x = (corner.x * 0.5 + 0.5) * window.innerWidth;
+    const y = (-corner.y * 0.5 + 0.5) * window.innerHeight;
+    minX = Math.min(minX, x);
+    minY = Math.min(minY, y);
+    maxX = Math.max(maxX, x);
+    maxY = Math.max(maxY, y);
+  }
+
+  if (maxX < 0 || minX > window.innerWidth || maxY < 0 || minY > window.innerHeight) {
+    hideObjectControlsOverlay();
+    return;
+  }
+
+  minX = THREE.MathUtils.clamp(minX, 6, window.innerWidth - 6);
+  maxX = THREE.MathUtils.clamp(maxX, 6, window.innerWidth - 6);
+  minY = THREE.MathUtils.clamp(minY, 6, window.innerHeight - 6);
+  maxY = THREE.MathUtils.clamp(maxY, 6, window.innerHeight - 6);
+  const width = Math.max(maxX - minX, 28);
+  const height = Math.max(maxY - minY, 28);
+
+  dom.objectControlsOverlay.classList.add("show");
+  dom.objectControlsOverlay.setAttribute("aria-hidden", "false");
+  if (dom.objectSelectionBox) {
+    Object.assign(dom.objectSelectionBox.style, {
+      left: `${minX}px`,
+      top: `${minY}px`,
+      width: `${width}px`,
+      height: `${height}px`
+    });
+  }
+  if (dom.objectToolbar) {
+    dom.objectToolbar.style.left = `${THREE.MathUtils.clamp((minX + maxX) / 2, 150, Math.max(window.innerWidth - 150, 150))}px`;
+    dom.objectToolbar.style.top = `${Math.max(minY - 9, 48)}px`;
+  }
+  if (dom.objectScaleHandle) {
+    dom.objectScaleHandle.style.left = `${maxX}px`;
+    dom.objectScaleHandle.style.top = `${maxY}px`;
+  }
+  if (dom.objectTransformReadout) {
+    const scalePercent = Math.round(getUserScale(selectedObject) * 100);
+    const tiltDegrees = Math.round(THREE.MathUtils.radToDeg(selectedObject.rotation.x));
+    dom.objectTransformReadout.textContent = `${scalePercent}% · 상하 ${tiltDegrees}°`;
+  }
+}
+
+function hideObjectControlsOverlay() {
+  dom.objectControlsOverlay?.classList.remove("show", "hovered");
+  dom.objectControlsOverlay?.setAttribute("aria-hidden", "true");
 }
 
 function getTwoPointerMetrics(a, b) {
@@ -1807,6 +2068,10 @@ function clearAll() {
 
 function clearPlacedObjects() {
   clearDimensionOverlay();
+  hideObjectControlsOverlay();
+  selectedObject = null;
+  dom.editPanel?.classList.remove("show");
+  if (dom.editTitle) dom.editTitle.textContent = "선택된 제품 없음";
 
   for (const obj of placedObjects) {
     scene.remove(obj);
@@ -1884,6 +2149,10 @@ async function restoreScene(snapshot) {
       if (!product) continue;
 
       const model = await loadModel(product);
+      if (product.rotationYDeg) {
+        model.rotation.y += THREE.MathUtils.degToRad(product.rotationYDeg);
+      }
+      rememberDefaultRotation(model);
       model.position.fromArray(item.position);
       model.quaternion.fromArray(item.quaternion);
       model.scale.fromArray(item.scale);
@@ -2092,6 +2361,7 @@ function render(timestamp, frame) {
   }
 
   renderer.render(scene, camera);
+  updateObjectControlsOverlay();
 }
 
 async function getHitTestReferenceSpace(session) {
@@ -2109,6 +2379,7 @@ function onResize() {
   camera.aspect = window.innerWidth / window.innerHeight;
   camera.updateProjectionMatrix();
   renderCalibrationOverlay();
+  updateObjectControlsOverlay();
 
   if (calibration.applied && photoPreviewMode && selectedObject) {
     applyReferenceCalibration(false, false);
