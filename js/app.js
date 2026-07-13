@@ -85,6 +85,8 @@ let previewGrid;
 let hitTestSource = null;
 let hitTestSourceRequested = false;
 let arReferenceSpaceType = "local";
+const smoothedReticlePosition = new THREE.Vector3();
+let hasSmoothedReticlePosition = false;
 let previewMode = false;
 let photoPreviewMode = false;
 let photoPreviewObjectUrl = null;
@@ -775,6 +777,7 @@ async function startAR() {
     session.addEventListener("end", () => {
       hitTestSourceRequested = false;
       hitTestSource = null;
+      hasSmoothedReticlePosition = false;
       reticleObject.visible = false;
       dom.reticle.style.display = "none";
       uiFolded = false;
@@ -1056,8 +1059,9 @@ function rememberDefaultRotation(model) {
 
 function loadModel(product) {
   if (modelCache.has(product.id)) {
-    const model = cloneModel(modelCache.get(product.id));
-    safelyApplyProductTextures(product, model);
+    const visualRoot = cloneModel(modelCache.get(product.id));
+    safelyApplyProductTextures(product, visualRoot);
+    const model = createPlacementAnchor(visualRoot, product);
     prepareProductScale(model, product);
     return Promise.resolve(model);
   }
@@ -1084,8 +1088,9 @@ function loadModel(product) {
         });
 
         modelCache.set(product.id, root);
-        const model = cloneModel(root);
-        safelyApplyProductTextures(product, model);
+        const visualRoot = cloneModel(root);
+        safelyApplyProductTextures(product, visualRoot);
+        const model = createPlacementAnchor(visualRoot, product);
         prepareProductScale(model, product);
         resolve(model);
       },
@@ -1093,6 +1098,26 @@ function loadModel(product) {
       reject
     );
   });
+}
+
+function createPlacementAnchor(visualRoot, product) {
+  visualRoot.updateMatrixWorld(true);
+
+  const box = new THREE.Box3().setFromObject(visualRoot);
+  const center = box.getCenter(new THREE.Vector3());
+  const anchor = new THREE.Group();
+
+  anchor.name = `${product.name || product.id || "product"} placement anchor`;
+
+  // GLB 파일마다 원점 위치가 달라도 AR 감지점에는 항상 제품의 바닥 중앙이 놓이게 한다.
+  visualRoot.position.x -= center.x;
+  visualRoot.position.y -= box.min.y;
+  visualRoot.position.z -= center.z;
+  visualRoot.updateMatrixWorld(true);
+
+  anchor.add(visualRoot);
+  anchor.userData.placementAnchor = "floor-center";
+  return anchor;
 }
 
 function prepareProductScale(model, product) {
@@ -1836,7 +1861,7 @@ function moveSelected(direction) {
   }
 
   const before = snapshotScene();
-  const step = 0.05;
+  const step = direction === "forward" || direction === "back" ? 0.01 : 0.05;
   const forward = new THREE.Vector3();
   camera.getWorldDirection(forward);
   forward.y = 0;
@@ -2350,11 +2375,34 @@ function render(timestamp, frame) {
         const hit = hitTestResults[0];
         const pose = hit.getPose(referenceSpace);
 
+        if (!pose) {
+          reticleObject.visible = false;
+          hasSmoothedReticlePosition = false;
+          dom.reticle.style.display = "none";
+          renderer.render(scene, camera);
+          return;
+        }
+
+        const hitMatrix = new THREE.Matrix4().fromArray(pose.transform.matrix);
+        const rawPosition = new THREE.Vector3().setFromMatrixPosition(hitMatrix);
+
+        if (
+          !hasSmoothedReticlePosition ||
+          smoothedReticlePosition.distanceToSquared(rawPosition) > 0.64
+        ) {
+          smoothedReticlePosition.copy(rawPosition);
+          hasSmoothedReticlePosition = true;
+        } else {
+          smoothedReticlePosition.lerp(rawPosition, 0.35);
+        }
+
+        hitMatrix.setPosition(smoothedReticlePosition);
         reticleObject.visible = true;
-        reticleObject.matrix.fromArray(pose.transform.matrix);
+        reticleObject.matrix.copy(hitMatrix);
         dom.reticle.style.display = "block";
       } else {
         reticleObject.visible = false;
+        hasSmoothedReticlePosition = false;
         dom.reticle.style.display = "none";
       }
     }
