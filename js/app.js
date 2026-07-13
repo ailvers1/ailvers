@@ -36,6 +36,23 @@ const dom = {
   captureStrip: $("captureStrip"),
   loadingOverlay: $("loadingOverlay"),
   loadingText: $("loadingText"),
+  calibrationLayer: $("calibrationLayer"),
+  calibrationSvg: $("calibrationSvg"),
+  calibrationLine: $("calibrationLine"),
+  calibrationPanel: $("calibrationPanel"),
+  calibrationBody: $("calibrationBody"),
+  calibrationToggleBtn: $("calibrationToggleBtn"),
+  calibrationSummary: $("calibrationSummary"),
+  calibrationPickBtn: $("calibrationPickBtn"),
+  calibrationRepickBtn: $("calibrationRepickBtn"),
+  calibrationLength: $("calibrationLength"),
+  calibrationUnit: $("calibrationUnit"),
+  calibrationApplyBtn: $("calibrationApplyBtn"),
+  calibrationResetBtn: $("calibrationResetBtn"),
+  calibrationReadout: $("calibrationReadout"),
+  calibrationFineTune: $("calibrationFineTune"),
+  calibrationFineTuneValue: $("calibrationFineTuneValue"),
+  calibrationRestoreBtn: $("calibrationRestoreBtn"),
 
   moveForward: $("moveForward"),
   moveBack: $("moveBack"),
@@ -74,6 +91,17 @@ let editPanelExpanded = false;
 let uiFolded = false;
 const previewPointers = new Map();
 let previewGesture = null;
+const calibration = {
+  points: [],
+  isPicking: false,
+  draggingIndex: null,
+  applied: false,
+  referenceMeters: 0,
+  pixelLength: 0,
+  pixelsPerMeter: 0,
+  autoUserScale: 1,
+  fineTune: 1
+};
 
 const gltfLoader = new GLTFLoader();
 const textureLoader = new THREE.TextureLoader();
@@ -295,6 +323,7 @@ function bindEvents() {
   renderer.domElement.addEventListener("pointercancel", onPhotoPreviewPointerEnd);
 
   dom.photoInput?.addEventListener("change", handlePhotoPreviewFile);
+  bindCalibrationEvents();
 }
 
 function safeClick(id, handler) {
@@ -306,6 +335,270 @@ function safeClick(id, handler) {
   }
 
   el.addEventListener("click", handler);
+}
+
+function bindCalibrationEvents() {
+  if (!dom.calibrationPanel || !dom.calibrationLayer) return;
+
+  safeClick("calibrationToggleBtn", () => {
+    const collapsed = dom.calibrationPanel.classList.toggle("collapsed");
+    dom.calibrationToggleBtn.textContent = collapsed ? "열기" : "접기";
+  });
+  safeClick("calibrationPickBtn", startCalibrationPicking);
+  safeClick("calibrationRepickBtn", startCalibrationPicking);
+  safeClick("calibrationApplyBtn", () => applyReferenceCalibration(true));
+  safeClick("calibrationResetBtn", () => resetCalibration(true));
+  safeClick("calibrationRestoreBtn", () => {
+    calibration.fineTune = 1;
+    dom.calibrationFineTune.value = "100";
+    dom.calibrationFineTuneValue.textContent = "100%";
+    applyReferenceCalibration(true);
+  });
+
+  dom.calibrationFineTune?.addEventListener("input", () => {
+    calibration.fineTune = Number(dom.calibrationFineTune.value) / 100;
+    dom.calibrationFineTuneValue.textContent = `${dom.calibrationFineTune.value}%`;
+
+    if (calibration.applied) {
+      applyReferenceCalibration(false, false);
+    }
+  });
+
+  document.querySelectorAll("[data-reference-cm]").forEach((button) => {
+    button.addEventListener("click", () => {
+      dom.calibrationLength.value = button.dataset.referenceCm;
+      dom.calibrationUnit.value = "cm";
+      refreshCalibrationReadout();
+    });
+  });
+
+  dom.calibrationLayer.addEventListener("pointerdown", onCalibrationPointerDown);
+  window.addEventListener("pointermove", onCalibrationPointerMove);
+  window.addEventListener("pointerup", onCalibrationPointerUp);
+  window.addEventListener("pointercancel", onCalibrationPointerUp);
+}
+
+function startCalibrationPicking() {
+  if (!photoPreviewMode) {
+    showToast("사진 배치 모드에서 기준 길이를 설정할 수 있습니다.");
+    return;
+  }
+
+  calibration.points = [];
+  calibration.isPicking = true;
+  calibration.draggingIndex = null;
+  calibration.applied = false;
+  dom.calibrationLayer.classList.add("is-picking");
+  dom.calibrationSummary.textContent = "기준 물체의 첫 번째 점을 선택하세요.";
+  renderCalibrationOverlay();
+  refreshCalibrationReadout();
+}
+
+function onCalibrationPointerDown(event) {
+  const handle = event.target.closest?.(".calibrationHandle");
+
+  if (handle) {
+    calibration.draggingIndex = Number(handle.dataset.pointIndex);
+    event.preventDefault();
+    return;
+  }
+
+  if (!calibration.isPicking) return;
+
+  event.preventDefault();
+  const point = normalizeCalibrationPoint(event.clientX, event.clientY);
+  calibration.points.push(point);
+
+  if (calibration.points.length >= 2) {
+    calibration.points = calibration.points.slice(0, 2);
+    calibration.isPicking = false;
+    dom.calibrationLayer.classList.remove("is-picking");
+    dom.calibrationSummary.textContent = "두 점 선택 완료. 실제 길이를 입력해 주세요.";
+  } else {
+    dom.calibrationSummary.textContent = "두 번째 점을 선택하세요.";
+  }
+
+  renderCalibrationOverlay();
+  refreshCalibrationReadout();
+}
+
+function onCalibrationPointerMove(event) {
+  if (calibration.draggingIndex === null) return;
+
+  event.preventDefault();
+  calibration.points[calibration.draggingIndex] = normalizeCalibrationPoint(event.clientX, event.clientY);
+  renderCalibrationOverlay();
+  refreshCalibrationReadout();
+
+  if (calibration.applied) {
+    applyReferenceCalibration(false, false);
+  }
+}
+
+function onCalibrationPointerUp() {
+  calibration.draggingIndex = null;
+}
+
+function normalizeCalibrationPoint(clientX, clientY) {
+  return {
+    x: THREE.MathUtils.clamp(clientX / Math.max(window.innerWidth, 1), 0, 1),
+    y: THREE.MathUtils.clamp(clientY / Math.max(window.innerHeight, 1), 0, 1)
+  };
+}
+
+function renderCalibrationOverlay() {
+  if (!dom.calibrationLayer) return;
+
+  dom.calibrationLayer.classList.toggle("has-point-1", calibration.points.length >= 1);
+  dom.calibrationLayer.classList.toggle("has-point-2", calibration.points.length >= 2);
+  dom.calibrationLayer.classList.toggle("has-line", calibration.points.length >= 2);
+
+  const handles = dom.calibrationLayer.querySelectorAll(".calibrationHandle");
+  calibration.points.forEach((point, index) => {
+    const handle = handles[index];
+    if (!handle) return;
+    handle.style.left = `${point.x * 100}%`;
+    handle.style.top = `${point.y * 100}%`;
+  });
+
+  if (calibration.points.length >= 2 && dom.calibrationLine) {
+    const [point1, point2] = calibration.points;
+    dom.calibrationLine.setAttribute("x1", String(point1.x * 100));
+    dom.calibrationLine.setAttribute("y1", String(point1.y * 100));
+    dom.calibrationLine.setAttribute("x2", String(point2.x * 100));
+    dom.calibrationLine.setAttribute("y2", String(point2.y * 100));
+  }
+}
+
+function getCalibrationPixelLength() {
+  if (calibration.points.length < 2) return 0;
+
+  const [point1, point2] = calibration.points;
+  return Math.hypot(
+    (point2.x - point1.x) * window.innerWidth,
+    (point2.y - point1.y) * window.innerHeight
+  );
+}
+
+function getCalibrationReferenceMeters() {
+  const value = Number(dom.calibrationLength?.value);
+  if (!Number.isFinite(value) || value <= 0) return 0;
+  return dom.calibrationUnit?.value === "mm" ? value / 1000 : value / 100;
+}
+
+function applyReferenceCalibration(record = true, notify = true) {
+  if (!photoPreviewMode) {
+    if (notify) showToast("사진 배치 모드에서만 기준 길이를 적용할 수 있습니다.");
+    return false;
+  }
+
+  if (!selectedObject || !currentProduct) {
+    if (notify) showToast("제품을 먼저 배치해 주세요.");
+    return false;
+  }
+
+  const pixelLength = getCalibrationPixelLength();
+  const referenceMeters = getCalibrationReferenceMeters();
+
+  if (calibration.points.length < 2) {
+    if (notify) showToast("기준점 두 개를 먼저 선택해 주세요.");
+    return false;
+  }
+
+  if (pixelLength < 24) {
+    if (notify) showToast("기준점 사이를 더 넓게 지정해 주세요.");
+    return false;
+  }
+
+  if (referenceMeters <= 0) {
+    if (notify) showToast("실제 길이를 0보다 크게 입력해 주세요.");
+    return false;
+  }
+
+  const before = record ? snapshotScene() : null;
+  const productHeight = Number(selectedObject.userData.dimensions?.height || currentProduct.height);
+  const productPixelHeight = (productHeight / referenceMeters) * pixelLength;
+  const worldPosition = selectedObject.getWorldPosition(new THREE.Vector3());
+  const objectDistance = Math.max(camera.position.distanceTo(worldPosition), 0.1);
+  const targetWorldHeight = pixelHeightToWorldHeight(
+    productPixelHeight,
+    objectDistance,
+    camera,
+    window.innerHeight
+  );
+  const autoUserScale = targetWorldHeight / Math.max(productHeight, 0.0001);
+
+  calibration.referenceMeters = referenceMeters;
+  calibration.pixelLength = pixelLength;
+  calibration.pixelsPerMeter = pixelLength / referenceMeters;
+  calibration.autoUserScale = autoUserScale;
+  calibration.applied = true;
+
+  applyUserScale(selectedObject, autoUserScale * calibration.fineTune);
+  updateDimensionOverlay();
+  refreshCalibrationReadout();
+
+  dom.calibrationSummary.textContent = `기준 ${formatReferenceLength(referenceMeters)} 적용됨`;
+  if (record) recordHistory(before);
+  if (notify) showToast("기준 길이에 맞춰 제품 크기를 보정했습니다.");
+  return true;
+}
+
+function pixelHeightToWorldHeight(pixelHeight, objectDistance, perspectiveCamera, viewportHeight) {
+  const verticalFov = THREE.MathUtils.degToRad(perspectiveCamera.fov);
+  const visibleWorldHeight = 2 * Math.tan(verticalFov / 2) * objectDistance;
+  return visibleWorldHeight * (pixelHeight / Math.max(viewportHeight, 1));
+}
+
+function resetCalibration(notify = true, resetProduct = true) {
+  const before = selectedObject ? snapshotScene() : null;
+
+  calibration.points = [];
+  calibration.isPicking = false;
+  calibration.draggingIndex = null;
+  calibration.applied = false;
+  calibration.referenceMeters = 0;
+  calibration.pixelLength = 0;
+  calibration.pixelsPerMeter = 0;
+  calibration.autoUserScale = 1;
+  calibration.fineTune = 1;
+
+  dom.calibrationLayer?.classList.remove("is-picking");
+  if (dom.calibrationFineTune) dom.calibrationFineTune.value = "100";
+  if (dom.calibrationFineTuneValue) dom.calibrationFineTuneValue.textContent = "100%";
+  if (dom.calibrationSummary) dom.calibrationSummary.textContent = "기준점이 설정되지 않았습니다.";
+
+  if (resetProduct && selectedObject && photoPreviewMode) {
+    applyUserScale(selectedObject, 1);
+    updateDimensionOverlay();
+    recordHistory(before);
+  }
+
+  renderCalibrationOverlay();
+  refreshCalibrationReadout();
+  if (notify) showToast("기준 길이 설정을 초기화했습니다.");
+}
+
+function refreshCalibrationReadout() {
+  if (!dom.calibrationReadout) return;
+
+  const pixelLength = getCalibrationPixelLength();
+  const referenceMeters = getCalibrationReferenceMeters();
+  const pixelsPerCm = referenceMeters > 0 ? pixelLength / (referenceMeters * 100) : 0;
+  const productHeightMeters = Number(selectedObject?.userData?.dimensions?.height || currentProduct?.height || 0);
+  const productPixelHeight = pixelsPerCm > 0 ? productHeightMeters * 100 * pixelsPerCm : 0;
+  const rows = dom.calibrationReadout.querySelectorAll("span");
+
+  if (rows[0]) rows[0].textContent = `화면 길이: ${pixelLength ? `${Math.round(pixelLength)} px` : "-"}`;
+  if (rows[1]) rows[1].textContent = `환산값: ${pixelsPerCm ? `${pixelsPerCm.toFixed(2)} px/cm` : "-"}`;
+  if (rows[2]) {
+    rows[2].textContent = `제품 높이: ${productHeightMeters ? `${Math.round(productHeightMeters * 100)} cm${productPixelHeight ? ` → ${Math.round(productPixelHeight)} px` : ""}` : "-"}`;
+  }
+}
+
+function formatReferenceLength(meters) {
+  const centimeters = meters * 100;
+  return `${Number.isInteger(centimeters) ? centimeters : centimeters.toFixed(1)} cm`;
 }
 
 function bindHoldRotate(id, direction) {
@@ -438,6 +731,10 @@ async function startAR() {
 
     previewMode = false;
     photoPreviewMode = false;
+    document.body.classList.remove("photo-calibration-available");
+    calibration.isPicking = false;
+    calibration.draggingIndex = null;
+    dom.calibrationLayer?.classList.remove("is-picking");
     uiFolded = false;
     updateUiFoldState();
     dom.photoPreviewBg?.classList.remove("show");
@@ -524,6 +821,9 @@ async function startPreview(message) {
   dom.reticle.style.display = "none";
   dom.photoPreviewBg?.classList.add("show");
   dom.photoPreviewHint?.classList.add("show");
+  document.body.classList.add("photo-calibration-available");
+  renderCalibrationOverlay();
+  refreshCalibrationReadout();
 
   await placePreviewProduct();
   showToast(message);
@@ -546,6 +846,8 @@ function handlePhotoPreviewFile(event) {
     showToast("갤러리에서 사진을 선택하거나 새로 촬영해 주세요.");
     return;
   }
+
+  resetCalibration(false, true);
 
   if (photoPreviewObjectUrl) {
     URL.revokeObjectURL(photoPreviewObjectUrl);
@@ -660,6 +962,9 @@ async function placePreviewProduct() {
     placedObjects.push(model);
     framePhotoPreviewCamera(model);
     selectObject(model);
+    if (calibration.applied) {
+      applyReferenceCalibration(false, false);
+    }
     recordHistory(before);
     uiFolded = true;
     updateUiFoldState();
@@ -784,7 +1089,7 @@ function getScaleBasis(size, axis) {
 
 function applyUserScale(model, userScale = 1) {
   const baseScale = getBaseScale(model);
-  const nextUserScale = THREE.MathUtils.clamp(userScale, 0.25, 3);
+  const nextUserScale = THREE.MathUtils.clamp(userScale, 0.25, 5);
   model.userData.userScale = nextUserScale;
   model.scale.set(
     baseScale.x * nextUserScale,
@@ -1050,6 +1355,7 @@ function selectObject(obj) {
   if (!obj) {
     dom.editPanel.classList.remove("show");
     dom.editTitle.textContent = "선택된 제품 없음";
+    refreshCalibrationReadout();
     return;
   }
 
@@ -1062,6 +1368,7 @@ function selectObject(obj) {
   dom.scaleRange.value = scalePct;
   dom.scaleValue.textContent = `${scalePct}%`;
   updateDimensionOverlay();
+  refreshCalibrationReadout();
 }
 
 function onPhotoPreviewPointerDown(event) {
@@ -1788,6 +2095,11 @@ function onResize() {
   renderer.setSize(window.innerWidth, window.innerHeight);
   camera.aspect = window.innerWidth / window.innerHeight;
   camera.updateProjectionMatrix();
+  renderCalibrationOverlay();
+
+  if (calibration.applied && photoPreviewMode && selectedObject) {
+    applyReferenceCalibration(false, false);
+  }
 }
 
 function showToast(message) {
