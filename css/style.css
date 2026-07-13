@@ -492,6 +492,103 @@ body.ui-clean #editPanel.collapsed {
   width: 100%;
 }
 
+body.photo-calibration-available #editPanel {
+  display: none !important;
+}
+
+#objectControlsOverlay {
+  position: fixed;
+  inset: 0;
+  z-index: 26;
+  display: none;
+  pointer-events: none;
+}
+
+#objectControlsOverlay.show {
+  display: block;
+}
+
+#calibrationLayer.is-picking ~ #objectControlsOverlay {
+  display: none;
+}
+
+#objectSelectionBox {
+  position: fixed;
+  box-sizing: border-box;
+  border: 1px dashed rgba(56,189,248,.82);
+  border-radius: 8px;
+  background: rgba(56,189,248,.025);
+  box-shadow: 0 0 0 1px rgba(0,0,0,.18);
+  pointer-events: none;
+}
+
+#objectControlsOverlay.hovered #objectSelectionBox {
+  border-style: solid;
+  border-color: #7dd3fc;
+  background: rgba(56,189,248,.06);
+}
+
+#objectToolbar {
+  position: fixed;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 6px;
+  border: 1px solid rgba(255,255,255,.22);
+  border-radius: 12px;
+  background: rgba(3,12,28,.9);
+  color: white;
+  box-shadow: 0 10px 28px rgba(0,0,0,.34);
+  backdrop-filter: blur(12px);
+  transform: translate(-50%, -100%);
+  pointer-events: auto;
+  touch-action: none;
+  white-space: nowrap;
+}
+
+#objectToolbar button {
+  padding: 7px 9px;
+  border-radius: 8px;
+  background: rgba(255,255,255,.09);
+  font-size: 11px;
+  cursor: ew-resize;
+  touch-action: none;
+}
+
+#objectTiltHandle {
+  cursor: ns-resize !important;
+}
+
+#objectResetBtn {
+  cursor: pointer !important;
+}
+
+#objectTransformReadout {
+  min-width: 68px;
+  color: #bae6fd;
+  font-size: 11px;
+  font-weight: 800;
+  text-align: center;
+}
+
+#objectScaleHandle {
+  position: fixed;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border: 2px solid white;
+  border-radius: 50%;
+  background: #0ea5e9;
+  color: white;
+  box-shadow: 0 5px 16px rgba(0,0,0,.38);
+  font-size: 16px;
+  line-height: 1;
+  transform: translate(-50%, -50%);
+  pointer-events: auto;
+  touch-action: none;
+  cursor: nwse-resize;
+}
+
 .row.small button {
   flex: 1;
 }
