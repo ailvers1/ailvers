@@ -450,6 +450,15 @@ body.ui-clean #editPanel.collapsed {
   gap: 10px;
 }
 
+#editDoneBtn {
+  width: 100%;
+  padding: 10px 12px;
+  border-radius: 12px;
+  background: #0ea5e9;
+  color: #fff;
+  font-weight: 900;
+}
+
 .pad {
   display: grid;
   grid-template-columns: 48px 48px 48px;
