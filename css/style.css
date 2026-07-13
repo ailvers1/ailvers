@@ -603,6 +603,1139 @@ body.ui-clean #editPanel.collapsed {
   filter: drop-shadow(0 1px 2px rgba(0, 0, 0, .9));
 }
 
+#calibrationPlane {
+  display: none;
+  fill: rgba(56,189,248,.10);
+  stroke: #38bdf8;
+  stroke-width: .42;
+  stroke-dasharray: 1.2 1;
+  vector-effect: non-scaling-stroke;
+  filter: drop-shadow(0 1px 2px rgba(0,0,0,.8));
+}
+
+#calibrationLayer.has-plane #calibrationPlane {
+  display: block;
+}
+
+#calibrationLayer.has-line #calibrationLine {
+  display: block;
+}
+
+.calibrationHandle {
+  position: absolute;
+  display: none;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: 3px solid white;
+  border-radius: 50%;
+  background: #facc15;
+  box-shadow: 0 3px 12px rgba(0, 0, 0, .45);
+  transform: translate(-50%, -50%);
+  pointer-events: auto;
+  touch-action: none;
+}
+
+#calibrationLayer.has-point-1 .calibrationHandle[data-point-index="0"],
+#calibrationLayer.has-point-2 .calibrationHandle[data-point-index="1"],
+#calibrationLayer.has-point-3 .calibrationHandle[data-point-index="2"],
+#calibrationLayer.has-point-4 .calibrationHandle[data-point-index="3"] {
+  display: block;
+}
+
+#calibrationPanel {
+  position: fixed;
+  right: 12px;
+  top: calc(env(safe-area-inset-top, 0px) + 90px);
+  z-index: 30;
+  display: none;
+  width: min(330px, calc(100vw - 24px));
+  border: 1px solid rgba(255,255,255,.22);
+  border-radius: 16px;
+  background: rgba(3, 12, 28, .88);
+  color: white;
+  box-shadow: 0 18px 48px rgba(0,0,0,.36);
+  backdrop-filter: blur(16px);
+  overflow: hidden;
+}
+
+body.photo-calibration-available #calibrationPanel {
+  display: block;
+}
+
+.calibrationHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 11px 12px;
+}
+
+.calibrationHeader > div {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.calibrationHeader strong {
+  color: #f8fafc;
+  font-size: 14px;
+}
+
+#calibrationSummary {
+  overflow: hidden;
+  color: #bae6fd;
+  font-size: 11px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+#calibrationToggleBtn {
+  flex: 0 0 auto;
+  padding: 6px 10px;
+  border-radius: 999px;
+  background: rgba(56,189,248,.22);
+}
+
+#calibrationPanel.collapsed #calibrationBody {
+  display: none;
+}
+
+#calibrationBody {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 0 12px 12px;
+  max-height: min(72vh, 680px);
+  overflow-y: auto;
+}
+
+.placementMode {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 7px;
+}
+
+.placementMode button {
+  border: 1px solid rgba(255,255,255,.18);
+  background: rgba(255,255,255,.08);
+}
+
+.placementMode button.selected {
+  border-color: rgba(56,189,248,.7);
+  background: rgba(56,189,248,.25);
+  color: #e0f2fe;
+  font-weight: 900;
+}
+
+.calibrationGuide {
+  margin: 0;
+  padding: 9px 10px;
+  border-radius: 10px;
+  background: rgba(250,204,21,.12);
+  color: #fef3c7;
+  font-size: 11px;
+  line-height: 1.45;
+}
+
+.calibrationPresets,
+.calibrationRow {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  flex-wrap: wrap;
+}
+
+.calibrationPresets button {
+  padding: 6px 8px;
+  border-radius: 999px;
+  background: rgba(255,255,255,.1);
+  font-size: 11px;
+}
+
+.calibrationRow button {
+  flex: 1;
+}
+
+.calibrationRow .primary {
+  border-color: rgba(250,204,21,.55);
+  background: rgba(250,204,21,.88);
+  color: #172033;
+  font-weight: 900;
+}
+
+.measurementInput {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) 72px;
+}
+
+.measurementInput label {
+  color: #cbd5e1;
+  font-size: 12px;
+}
+
+#calibrationLength,
+#calibrationUnit {
+  min-width: 0;
+  box-sizing: border-box;
+  padding: 8px 9px;
+  border: 1px solid rgba(255,255,255,.22);
+  border-radius: 8px;
+  background: rgba(255,255,255,.1);
+  color: white;
+}
+
+#calibrationUnit option {
+  background: #111827;
+}
+
+#wallCalibrationControls {
+  display: none;
+  gap: 9px;
+}
+
+body.wall-placement-mode #wallCalibrationControls {
+  display: grid;
+}
+
+body.wall-placement-mode .floorCalibrationOnly {
+  display: none;
+}
+
+.wallPointOrder {
+  margin: 0;
+  color: #bae6fd;
+  font-size: 11px;
+  line-height: 1.45;
+}
+
+.wallSizeGrid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 7px;
+}
+
+.wallSizeGrid label,
+.wallPositionControls label {
+  display: grid;
+  gap: 4px;
+  color: #cbd5e1;
+  font-size: 11px;
+}
+
+.wallSizeGrid input {
+  min-width: 0;
+  width: 100%;
+  box-sizing: border-box;
+  padding: 8px 9px;
+  border: 1px solid rgba(255,255,255,.22);
+  border-radius: 8px;
+  background: rgba(255,255,255,.1);
+  color: white;
+}
+
+.wallPositionControls {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 5px;
+}
+
+.wallPositionControls label {
+  grid-template-columns: 1fr auto;
+}
+
+.wallPositionControls input {
+  width: 100%;
+}
+
+#calibrationReadout {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 3px;
+  padding: 9px 10px;
+  border-radius: 10px;
+  background: rgba(14,165,233,.12);
+  color: #dbeafe;
+  font-size: 11px;
+}
+
+.fineTune {
+  display: grid;
+  gap: 6px;
+}
+
+.fineTuneLabel {
+  display: flex;
+  justify-content: space-between;
+  color: #cbd5e1;
+  font-size: 12px;
+}
+
+#calibrationFineTune {
+  width: 100%;
+}
+
+#calibrationRestoreBtn {
+  width: 100%;
+  background: rgba(255,255,255,.08);
+}
+
+body.ui-clean #calibrationPanel,
+body.ui-clean #calibrationLayer {
+  display: none !important;
+}
+
+#loadingOverlay {
+  position: fixed;
+  inset: 0;
+  z-index: 120;
+  display: none;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  background: rgba(0,0,0,.58);
+  color: white;
+  text-align: center;
+}
+
+#loadingOverlay.show {
+  display: flex;
+}
+
+#loadingOverlay .loader {
+  width: 42px;
+  height: 42px;
+  border: 4px solid rgba(255,255,255,.28);
+  border-top-color: white;
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+}
+
+#loadingText {
+  max-width: 82vw;
+  font-size: 14px;
+  font-weight: 800;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (max-width: 520px) {
+  #startScreen {
+    align-items: flex-start;
+    overflow-y: auto;
+    padding-top: calc(env(safe-area-inset-top, 0px) + 34px);
+    padding-bottom: calc(env(safe-area-inset-bottom, 0px) + 24px);
+  }
+
+  #startScreen::before {
+    inset: 12px;
+    border-radius: 22px;
+  }
+
+  .startShell {
+    grid-template-columns: 1fr;
+    gap: 24px;
+    min-height: calc(100dvh - env(safe-area-inset-top, 0px) - 68px);
+  }
+
+  .startBrand {
+    width: min(258px, 76vw);
+  }
+
+  .startActions {
+    grid-column: 1;
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .startPreview {
+    grid-column: 1;
+    grid-row: auto;
+    width: min(100%, 330px);
+    justify-self: center;
+    order: 3;
+  }
+
+  .notice {
+    grid-column: 1;
+  }
+
+  #startBtnBig,
+  #previewBtnBig.secondary {
+    width: 100%;
+  }
+
+  #topBar {
+    padding: 10px;
+  }
+
+  #captureHint {
+    top: calc(env(safe-area-inset-top, 0px) + 118px);
+  }
+
+  #calibrationPanel {
+    left: 12px;
+    right: 12px;
+    top: auto;
+    bottom: calc(env(safe-area-inset-bottom, 0px) + 12px);
+    width: auto;
+  }
+
+  #calibrationPanel:not(.collapsed) ~ #editPanel {
+    display: none;
+  }
+
+  select {
+    min-width: 150px;
+    font-size: 12px;
+  }
+
+  button {
+    font-size: 12px;
+    padding: 7px 10px;
+  }
+
+  #editPanel {
+    width: min(224px, calc(100vw - 24px));
+    bottom: calc(env(safe-area-inset-bottom, 0px) + 12px);
+  }
+
+  #editPanel.collapsed {
+    width: min(232px, calc(100vw - 24px));
+  }
+
+  .pad {
+    grid-template-columns: 44px 44px 44px;
+    grid-template-rows: 44px 44px 44px;
+  }
+
+  .pad button {
+    width: 44px;
+    height: 44px;
+    border-radius: 14px;
+  }
+}
+
+@media (orientation: landscape) and (max-height: 540px) {
+  #startScreen {
+    overflow-y: auto;
+    padding: 18px 24px;
+  }
+
+  #startScreen::before {
+    inset: 10px;
+    border-radius: 20px;
+  }
+
+  .startShell {
+    width: min(760px, 100%);
+    grid-template-columns: minmax(0, 1fr) 230px;
+    gap: 14px;
+  }
+
+  .startBrand {
+    width: 220px;
+  }
+
+  #startScreen h1 {
+    font-size: 42px;
+  }
+
+  #startScreen p {
+    font-size: 14px;
+  }
+
+  .startPreview {
+    width: 220px;
+  }
+
+  .notice {
+    padding-top: 0;
+  }
+
+  #topBar {
+    right: auto;
+    bottom: 0;
+    width: min(330px, 42vw);
+    overflow-y: auto;
+    padding: 10px;
+    background: linear-gradient(to right, rgba(0,0,0,.9), rgba(0,0,0,.58));
+  }
+
+  #topBar .row {
+    gap: 6px;
+  }
+
+  #editPanel {
+    left: 50%;
+    right: auto;
+    bottom: calc(env(safe-area-inset-bottom, 0px) + 12px);
+    transform: translateX(-50%);
+    width: 206px;
+    padding: 9px;
+    gap: 7px;
+  }
+
+  #editPanel.collapsed {
+    width: 220px;
+    padding: 7px 9px;
+  }
+
+  .pad {
+    grid-template-columns: 40px 40px 40px;
+    grid-template-rows: 40px 40px 40px;
+    gap: 5px;
+  }
+
+  .pad button {
+    width: 40px;
+    height: 40px;
+    border-radius: 12px;
+  }
+
+  #editControls {
+    gap: 7px;
+  }
+
+  #toast {
+    bottom: 24px;
+    max-width: 46vw;
+  }
+
+  #captureHint {
+    top: 12px;
+    bottom: auto;
+    left: 12px;
+    right: 12px;
+    transform: none;
+  }
+
+  #captureStrip {
+    right: 216px;
+    bottom: 12px;
+    flex-direction: row;
+  }
+
+  #calibrationPanel {
+    top: 12px;
+    right: 12px;
+    bottom: auto;
+    width: min(300px, 42vw);
+    max-height: calc(100vh - 24px);
+    overflow-y: auto;
+  }
+}
+html,
+body {
+  margin: 0;
+  width: 100%;
+  height: 100%;
+  min-height: 100dvh;
+  overflow: hidden;
+  background: #000;
+  font-family: system-ui, -apple-system, BlinkMacSystemFont, "Noto Sans KR", sans-serif;
+  overscroll-behavior: none;
+}
+
+canvas {
+  position: fixed;
+  inset: 0;
+  touch-action: none;
+}
+
+#photoPreviewBg {
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  display: none;
+  background-position: center;
+  background-size: cover;
+  background-repeat: no-repeat;
+}
+
+#photoPreviewBg.show {
+  display: block;
+}
+
+#photoInput {
+  display: none;
+}
+
+#photoPreviewHint {
+  position: fixed;
+  left: 12px;
+  right: 12px;
+  top: calc(env(safe-area-inset-top, 0px) + 88px);
+  z-index: 64;
+  display: none;
+  justify-content: center;
+  pointer-events: none;
+}
+
+#photoPreviewHint.show {
+  display: flex;
+}
+
+#photoPreviewHint span {
+  max-width: min(520px, calc(100vw - 24px));
+  padding: 7px 12px;
+  border: 1px solid rgba(255,255,255,.22);
+  border-radius: 999px;
+  background: rgba(0,0,0,.62);
+  color: white;
+  font-size: 12px;
+  font-weight: 700;
+  text-align: center;
+  box-shadow: 0 8px 22px rgba(0,0,0,.22);
+  backdrop-filter: blur(12px);
+}
+
+body.ui-clean #photoPreviewHint,
+body.ui-clean #captureHint {
+  display: none !important;
+}
+
+body.ui-clean #captureStrip {
+  opacity: 0;
+  pointer-events: none;
+}
+
+button,
+select,
+input {
+  font-family: inherit;
+}
+
+#startScreen {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  background:
+    linear-gradient(180deg, rgba(255,255,255,.72), rgba(255,255,255,.22)),
+    radial-gradient(circle at 22% 12%, rgba(157,205,51,.16), transparent 30%),
+    linear-gradient(135deg, #f6f2e8, #ebe4d4);
+  color: #061e55;
+  padding: clamp(22px, 6vw, 56px);
+}
+
+#startScreen::before {
+  content: "";
+  position: absolute;
+  inset: 22px;
+  border: 1px solid rgba(6,30,85,.08);
+  border-radius: 28px;
+  pointer-events: none;
+}
+
+#startScreen.hidden {
+  display: none;
+}
+
+.startShell {
+  width: min(1040px, 100%);
+  position: relative;
+  z-index: 1;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(280px, 420px);
+  align-items: center;
+  column-gap: clamp(28px, 8vw, 92px);
+  row-gap: 30px;
+}
+
+.startBrand {
+  grid-column: 1 / -1;
+  display: inline-flex;
+  align-items: center;
+  width: min(270px, 70vw);
+}
+
+.startBrand img {
+  display: block;
+  width: 100%;
+  height: auto;
+  object-fit: contain;
+}
+
+.startCopy {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.startEyebrow {
+  color: #245a94;
+  font-size: 12px;
+  font-weight: 900;
+  letter-spacing: 0;
+}
+
+#startScreen h1 {
+  margin: 0;
+  color: #061e55;
+  font-size: clamp(38px, 7vw, 68px);
+  line-height: 1.05;
+  font-weight: 900;
+  letter-spacing: 0;
+}
+
+#startScreen p {
+  max-width: 470px;
+  margin: 0;
+  color: rgba(6,30,85,.72);
+  font-size: 16px;
+  line-height: 1.55;
+  font-weight: 650;
+}
+
+.startActions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  width: 100%;
+  grid-column: 1;
+}
+
+#startBtnBig {
+  border: 0;
+  border-radius: 12px;
+  padding: 15px 30px;
+  background: #061e55;
+  color: white;
+  font-size: 16px;
+  font-weight: 800;
+  box-shadow: 0 16px 34px rgba(6,30,85,.24);
+}
+
+#previewBtnBig {
+  margin-top: 0;
+}
+
+#previewBtnBig.secondary {
+  border: 1px solid rgba(6,30,85,.16);
+  border-radius: 12px;
+  padding: 14px 20px;
+  background: rgba(255,255,255,.76);
+  color: #061e55;
+  font-size: 14px;
+  font-weight: 700;
+  box-shadow: 0 12px 28px rgba(6,30,85,.08);
+}
+
+.notice {
+  grid-column: 1;
+  padding-top: 4px;
+  color: rgba(6,30,85,.58);
+  font-size: 12px;
+  line-height: 1.5;
+  font-weight: 650;
+}
+
+.startPreview {
+  grid-column: 2;
+  grid-row: 2 / span 3;
+  width: min(100%, 400px);
+  aspect-ratio: 1 / 1;
+  align-self: center;
+  border-radius: 28px;
+  background: rgba(255,255,255,.72);
+  border: 1px solid rgba(6,30,85,.10);
+  box-shadow: 0 28px 70px rgba(6,30,85,.16);
+  overflow: hidden;
+  position: relative;
+}
+
+.startPreview img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+#topBar {
+  position: fixed;
+  left: 0;
+  right: 0;
+  top: 0;
+  z-index: 20;
+  display: none;
+  flex-direction: column;
+  gap: 7px;
+  padding: calc(env(safe-area-inset-top, 0px) + 8px) 10px 10px;
+  background: linear-gradient(to bottom, rgba(0,0,0,.72), rgba(0,0,0,.34));
+  color: white;
+  backdrop-filter: blur(10px);
+}
+
+#topBar.show {
+  display: flex;
+}
+
+#uiFoldBtn {
+  align-self: flex-end;
+  border-radius: 999px;
+  padding: 6px 11px;
+  background: rgba(14,165,233,.72);
+  font-weight: 800;
+}
+
+#topBar.folded {
+  left: auto;
+  top: calc(env(safe-area-inset-top, 0px) + 8px);
+  right: 8px;
+  width: auto;
+  padding: 0;
+  border-radius: 999px;
+  background: transparent;
+  backdrop-filter: none;
+}
+
+#topBar.folded .row {
+  display: none;
+}
+
+#topBar.folded #uiFoldBtn {
+  align-self: center;
+  min-width: 0;
+  padding: 7px 10px;
+  border-color: rgba(255,255,255,.18);
+  background: rgba(0,0,0,.36);
+  color: rgba(255,255,255,.88);
+  box-shadow: 0 6px 18px rgba(0,0,0,.18);
+  backdrop-filter: blur(10px);
+}
+
+.row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.row label,
+.row span {
+  font-size: 13px;
+}
+
+select {
+  min-width: 180px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  border: 1px solid rgba(255,255,255,.3);
+  background: rgba(255,255,255,.14);
+  color: white;
+}
+
+select option {
+  background: #111827;
+  color: white;
+}
+
+button {
+  border: 1px solid rgba(255,255,255,.3);
+  border-radius: 8px;
+  padding: 8px 12px;
+  background: rgba(255,255,255,.13);
+  color: white;
+  font-size: 13px;
+  cursor: pointer;
+  touch-action: manipulation;
+  user-select: none;
+}
+
+button:active {
+  transform: scale(.97);
+}
+
+button:disabled {
+  cursor: default;
+  opacity: 0.45;
+  transform: none;
+}
+
+#placeBtn {
+  background: rgba(14,165,233,.75);
+}
+
+#savePhotoBtn {
+  background: rgba(16,185,129,.78);
+  font-weight: 800;
+}
+
+#clearBtn {
+  background: rgba(220,38,38,.75);
+}
+
+#scaleRange {
+  width: 120px;
+}
+
+#reticle {
+  position: fixed;
+  left: 50%;
+  top: 50%;
+  z-index: 15;
+  width: 120px;
+  height: 120px;
+  border: 3px solid #38bdf8;
+  border-radius: 50%;
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+  display: none;
+  box-shadow: 0 0 24px rgba(56,189,248,.6);
+}
+
+#reticle::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 12px;
+  height: 12px;
+  background: #38bdf8;
+  border-radius: 50%;
+  transform: translate(-50%, -50%);
+}
+
+#editPanel {
+  position: fixed;
+  left: 50%;
+  bottom: calc(env(safe-area-inset-bottom, 0px) + 18px);
+  z-index: 25;
+  display: none;
+  flex-direction: column;
+  gap: 10px;
+  width: min(228px, calc(100vw - 28px));
+  padding: 10px;
+  transform: translateX(-50%);
+  border-radius: 16px;
+  background: rgba(0,0,0,.66);
+  color: white;
+  border: 1px solid rgba(255,255,255,.25);
+  box-shadow: 0 14px 34px rgba(0,0,0,.36);
+  backdrop-filter: blur(14px);
+}
+
+#editPanel.show {
+  display: flex;
+}
+
+#editPanel.collapsed {
+  width: min(220px, calc(100vw - 28px));
+  padding: 7px 9px;
+  border-radius: 999px;
+}
+
+body.ui-clean #editPanel.collapsed {
+  opacity: 0.82;
+}
+
+#editPanel.collapsed #editControls {
+  display: none;
+}
+
+#editHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  cursor: pointer;
+  user-select: none;
+}
+
+#editTitle {
+  font-size: 13px;
+  font-weight: 700;
+  color: #7dd3fc;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+#editToggleBtn {
+  flex: 0 0 auto;
+  border-radius: 999px;
+  min-width: 58px;
+  padding: 7px 10px;
+  background: rgba(14,165,233,.74);
+  font-weight: 800;
+}
+
+.collapsed #editToggleBtn {
+  background: rgba(255,255,255,.18);
+}
+
+#editControls {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+}
+
+.pad {
+  display: grid;
+  grid-template-columns: 48px 48px 48px;
+  grid-template-rows: 48px 48px 48px;
+  gap: 7px;
+  justify-content: center;
+}
+
+.pad button {
+  width: 48px;
+  height: 48px;
+  padding: 0;
+  border-radius: 16px;
+  font-size: 18px;
+  font-weight: 900;
+}
+
+#moveForward {
+  grid-column: 2;
+  grid-row: 1;
+}
+
+#moveLeft {
+  grid-column: 1;
+  grid-row: 2;
+}
+
+#moveRight {
+  grid-column: 3;
+  grid-row: 2;
+}
+
+#moveBack {
+  grid-column: 2;
+  grid-row: 3;
+}
+
+#editControls .row.small {
+  justify-content: center;
+  width: 100%;
+}
+
+.row.small button {
+  flex: 1;
+}
+
+#toast {
+  position: fixed;
+  left: 50%;
+  bottom: 120px;
+  z-index: 60;
+  display: none;
+  transform: translateX(-50%);
+  padding: 10px 16px;
+  border-radius: 999px;
+  background: rgba(0,0,0,.86);
+  color: white;
+  font-size: 13px;
+  max-width: 82vw;
+  text-align: center;
+}
+
+#captureHint {
+  position: fixed;
+  left: 12px;
+  right: 12px;
+  top: calc(env(safe-area-inset-top, 0px) + 88px);
+  z-index: 65;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  transform: none;
+  min-height: 34px;
+  padding: 6px 10px;
+  border: 1px solid rgba(255,255,255,.22);
+  border-radius: 10px;
+  background: rgba(0,0,0,.72);
+  color: white;
+  box-shadow: 0 8px 22px rgba(0,0,0,.24);
+  backdrop-filter: blur(12px);
+}
+
+#captureHint.show {
+  display: flex;
+}
+
+#captureHint span {
+  white-space: nowrap;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+#captureHint button {
+  display: none;
+  padding: 5px 10px;
+  background: rgba(245,158,11,.82);
+  border-color: rgba(255,255,255,.36);
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+#captureStrip {
+  position: fixed;
+  right: 12px;
+  bottom: 18px;
+  z-index: 24;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+#captureStrip img {
+  width: 86px;
+  height: 58px;
+  object-fit: cover;
+  border-radius: 8px;
+  border: 1px solid rgba(255,255,255,.3);
+}
+
+#calibrationLayer {
+  position: fixed;
+  inset: 0;
+  z-index: 18;
+  pointer-events: none;
+  touch-action: none;
+}
+
+#calibrationLayer.is-picking {
+  pointer-events: auto;
+  cursor: crosshair;
+  background: rgba(2, 12, 32, .08);
+}
+
+#calibrationSvg {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+  pointer-events: none;
+}
+
+#calibrationLine {
+  display: none;
+  stroke: #facc15;
+  stroke-width: .42;
+  stroke-dasharray: 1.2 1;
+  vector-effect: non-scaling-stroke;
+  filter: drop-shadow(0 1px 2px rgba(0, 0, 0, .9));
+}
+
 #calibrationLayer.has-line #calibrationLine {
   display: block;
 }
