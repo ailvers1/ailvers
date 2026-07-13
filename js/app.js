@@ -60,6 +60,8 @@ const dom = {
   moveRight: $("moveRight"),
   rotateLeft: $("rotateLeft"),
   rotateRight: $("rotateRight"),
+  tiltUp: $("tiltUp"),
+  tiltDown: $("tiltDown"),
   heightUp: $("heightUp"),
   heightDown: $("heightDown")
 };
@@ -270,8 +272,10 @@ function bindEvents() {
   safeClick("moveLeft", () => moveSelected("left"));
   safeClick("moveRight", () => moveSelected("right"));
 
-  bindHoldRotate("rotateLeft", 1);
-  bindHoldRotate("rotateRight", -1);
+  bindHoldRotate("rotateLeft", 1, "y");
+  bindHoldRotate("rotateRight", -1, "y");
+  bindHoldRotate("tiltUp", -1, "x");
+  bindHoldRotate("tiltDown", 1, "x");
 
   safeClick("heightUp", () => heightSelected(0.05));
   safeClick("heightDown", () => heightSelected(-0.05));
@@ -601,7 +605,7 @@ function formatReferenceLength(meters) {
   return `${Number.isInteger(centimeters) ? centimeters : centimeters.toFixed(1)} cm`;
 }
 
-function bindHoldRotate(id, direction) {
+function bindHoldRotate(id, direction, axis = "y") {
   const el = document.getElementById(id);
 
   if (!el) {
@@ -621,7 +625,7 @@ function bindHoldRotate(id, direction) {
 
     const delta = Math.min((time - lastTime) / 1000, 0.05);
     lastTime = time;
-    rotateSelected(direction * speed * delta, true);
+    rotateSelected(direction * speed * delta, true, axis);
     frameId = requestAnimationFrame(step);
   };
 
@@ -629,7 +633,7 @@ function bindHoldRotate(id, direction) {
     event.preventDefault();
 
     if (!selectedObject) {
-      rotateSelected(0);
+      rotateSelected(0, false, axis);
       return;
     }
 
@@ -1600,7 +1604,7 @@ function moveSelected(direction) {
   recordHistory(before);
 }
 
-function rotateSelected(rad, silent = false) {
+function rotateSelected(rad, silent = false, axis = "y") {
   if (!selectedObject) {
     if (!silent) {
       showToast("회전할 제품을 선택하세요.");
@@ -1608,7 +1612,16 @@ function rotateSelected(rad, silent = false) {
     return;
   }
 
-  selectedObject.rotation.y += rad;
+  if (axis === "x") {
+    const tiltLimit = THREE.MathUtils.degToRad(60);
+    selectedObject.rotation.x = THREE.MathUtils.clamp(
+      selectedObject.rotation.x + rad,
+      -tiltLimit,
+      tiltLimit
+    );
+  } else {
+    selectedObject.rotation.y += rad;
+  }
   updateDimensionOverlay();
 }
 
