@@ -756,16 +756,21 @@ function loadModel(product) {
 function prepareProductScale(model, product) {
   const box = new THREE.Box3().setFromObject(model);
   const size = box.getSize(new THREE.Vector3());
-  const currentHeight = getScaleBasis(size, product.scaleBasisAxis);
-  const targetHeight = Number(product.height) || currentHeight;
-  const baseScale = targetHeight / currentHeight;
+  const targetWidth = Number(product.width) || size.x;
+  const targetHeight = Number(product.height) || size.y;
+  const targetDepth = Number(product.depth) || size.z;
+  const baseScale = {
+    x: targetWidth / Math.max(size.x, 0.0001),
+    y: targetHeight / Math.max(size.y, 0.0001),
+    z: targetDepth / Math.max(size.z, 0.0001)
+  };
 
   model.userData.baseScale = baseScale;
   model.userData.userScale = 1;
   model.userData.dimensions = {
-    width: Number(product.width) || size.x * baseScale,
+    width: targetWidth,
     height: targetHeight,
-    depth: Number(product.depth) || size.z * baseScale
+    depth: targetDepth
   };
 }
 
@@ -778,10 +783,28 @@ function getScaleBasis(size, axis) {
 }
 
 function applyUserScale(model, userScale = 1) {
-  const baseScale = model.userData.baseScale || 1;
+  const baseScale = getBaseScale(model);
   const nextUserScale = THREE.MathUtils.clamp(userScale, 0.25, 3);
   model.userData.userScale = nextUserScale;
-  model.scale.setScalar(baseScale * nextUserScale);
+  model.scale.set(
+    baseScale.x * nextUserScale,
+    baseScale.y * nextUserScale,
+    baseScale.z * nextUserScale
+  );
+}
+
+function getBaseScale(model) {
+  const value = model?.userData?.baseScale;
+
+  if (typeof value === "number") {
+    return { x: value, y: value, z: value };
+  }
+
+  return {
+    x: Number(value?.x) || 1,
+    y: Number(value?.y) || 1,
+    z: Number(value?.z) || 1
+  };
 }
 
 function getUserScale(model) {
@@ -1305,11 +1328,9 @@ function updateDimensionOverlay() {
   const max = box.max;
   const pad = Math.max(Math.max(size.x, size.y, size.z) * 0.06, 0.045);
   const y = min.y + pad * 0.35;
-  const dims = selectedObject.userData.dimensions || {};
-  const userScale = getUserScale(selectedObject);
-  const width = (dims.width || size.x) * userScale;
-  const height = (dims.height || size.y) * userScale;
-  const depth = (dims.depth || size.z) * userScale;
+  const width = size.x;
+  const height = size.y;
+  const depth = size.z;
 
   dimensionGroup = new THREE.Group();
   dimensionGroup.name = "Dimension overlay";
@@ -1546,7 +1567,8 @@ async function restoreScene(snapshot) {
       model.position.fromArray(item.position);
       model.quaternion.fromArray(item.quaternion);
       model.scale.fromArray(item.scale);
-      model.userData.userScale = model.scale.x / (model.userData.baseScale || 1);
+      const baseScale = getBaseScale(model);
+      model.userData.userScale = model.scale.x / baseScale.x;
       model.userData.productId = item.productId;
       model.userData.productName = item.productName || product.name;
 
