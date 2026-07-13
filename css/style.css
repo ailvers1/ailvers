@@ -212,106 +212,21 @@ input {
   grid-column: 2;
   grid-row: 2 / span 3;
   width: min(100%, 400px);
-  aspect-ratio: 1 / 1.05;
+  aspect-ratio: 1 / 1;
   align-self: center;
   border-radius: 28px;
-  background:
-    linear-gradient(145deg, rgba(255,255,255,.82), rgba(255,255,255,.42)),
-    linear-gradient(135deg, rgba(36,90,148,.10), rgba(157,205,51,.12));
+  background: rgba(255,255,255,.72);
   border: 1px solid rgba(6,30,85,.10);
   box-shadow: 0 28px 70px rgba(6,30,85,.16);
   overflow: hidden;
   position: relative;
 }
 
-.startPreview::before {
-  content: "실측 배치";
-  position: absolute;
-  left: 18px;
-  top: 18px;
-  padding: 7px 10px;
-  border-radius: 999px;
-  background: rgba(6,30,85,.92);
-  color: white;
-  font-size: 12px;
-  font-weight: 850;
-}
-
-.previewRoom {
-  position: absolute;
-  inset: 0;
-}
-
-.roomLine {
-  position: absolute;
-  background: rgba(6,30,85,.12);
-}
-
-.roomLine.floor {
-  left: 12%;
-  right: 10%;
-  bottom: 24%;
-  height: 2px;
-  transform: skewX(-18deg);
-}
-
-.roomLine.wall {
-  top: 18%;
-  bottom: 24%;
-  left: 23%;
-  width: 2px;
-}
-
-.previewKiosk {
-  position: absolute;
-  left: 43%;
-  bottom: 24%;
-  width: 31%;
-  height: 54%;
-  border-radius: 16px 16px 10px 10px;
-  background: linear-gradient(180deg, #f8fafc, #d8dde1);
-  border: 5px solid #061e55;
-  box-shadow: 18px 24px 34px rgba(6,30,85,.16);
-}
-
-.kioskScreen {
-  position: absolute;
-  left: 14%;
-  right: 14%;
-  top: 15%;
-  height: 48%;
-  border-radius: 6px;
-  background: linear-gradient(180deg, #061e55, #12376c);
-}
-
-.kioskBase {
-  position: absolute;
-  left: 27%;
-  right: 27%;
-  bottom: 10%;
-  height: 8%;
-  border-radius: 5px;
-  background: #9dcd33;
-}
-
-.measureLine {
-  position: absolute;
-  background: #9dcd33;
-  box-shadow: 0 0 0 1px rgba(6,30,85,.06);
-}
-
-.measureLine.height {
-  right: 18%;
-  bottom: 24%;
-  width: 3px;
-  height: 54%;
-}
-
-.measureLine.width {
-  left: 43%;
-  bottom: 16%;
-  width: 31%;
-  height: 3px;
+.startPreview img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
 }
 
 #topBar {
