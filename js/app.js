@@ -28,8 +28,8 @@ const dom = {
   editPanel: $("editPanel"),
   editHeader: $("editHeader"),
   editTitle: $("editTitle"),
-  editToggleBtn: $("editToggleBtn"),
   editDoneBtn: $("editDoneBtn"),
+  editStepBtn: $("editStepBtn"),
   editControls: $("editControls"),
   toast: $("toast"),
   captureHint: $("captureHint"),
@@ -101,6 +101,7 @@ let historyStack = [];
 let redoStack = [];
 let isRestoringHistory = false;
 let editPanelExpanded = false;
+let editMoveStepMeters = 0.05;
 let uiFolded = false;
 const previewPointers = new Map();
 let previewGesture = null;
@@ -269,32 +270,25 @@ function bindEvents() {
 
   safeClick("undoBtn", undoLastAction);
   safeClick("redoBtn", redoLastAction);
-  safeClick("editToggleBtn", toggleEditPanel);
   safeClick("editDoneBtn", completeEdit);
+  safeClick("editStepBtn", toggleEditMoveStep);
   safeClick("uiFoldBtn", toggleUiFold);
   safeClick("captureHintBtn", captureScreen);
 
-  if (dom.editHeader) {
-    dom.editHeader.addEventListener("click", (event) => {
-      if (event.target === dom.editToggleBtn) return;
-      toggleEditPanel();
-    });
-  }
-
   safeClick("clearBtn", clearAll);
 
-  safeClick("moveForward", () => moveSelected("forward"));
-  safeClick("moveBack", () => moveSelected("back"));
-  safeClick("moveLeft", () => moveSelected("left"));
-  safeClick("moveRight", () => moveSelected("right"));
+  bindHoldTranslate("moveForward", "forward");
+  bindHoldTranslate("moveBack", "back");
+  bindHoldTranslate("moveLeft", "left");
+  bindHoldTranslate("moveRight", "right");
 
   bindHoldRotate("rotateLeft", 1, "y");
   bindHoldRotate("rotateRight", -1, "y");
   bindHoldRotate("tiltUp", -1, "x");
   bindHoldRotate("tiltDown", 1, "x");
 
-  safeClick("heightUp", () => heightSelected(0.05));
-  safeClick("heightDown", () => heightSelected(-0.05));
+  bindHoldTranslate("heightUp", "up", "vertical");
+  bindHoldTranslate("heightDown", "down", "vertical");
 
   if (dom.productSelect) {
     dom.productSelect.addEventListener("change", () => {
@@ -688,6 +682,83 @@ function bindHoldRotate(id, direction, axis = "y") {
       el.releasePointerCapture?.(event.pointerId);
     } catch {
       // Some mobile browsers release pointer capture automatically.
+    }
+  };
+
+  el.addEventListener("pointerdown", start);
+  el.addEventListener("pointerup", stop);
+  el.addEventListener("pointercancel", stop);
+  el.addEventListener("pointerleave", stop);
+}
+
+function bindHoldTranslate(id, direction, mode = "plane") {
+  const el = document.getElementById(id);
+  if (!el) return;
+
+  let holdTimer = null;
+  let frameId = null;
+  let lastTime = 0;
+  let beforeMove = null;
+
+  const applyStep = (distance) => {
+    if (mode === "vertical") {
+      applySelectedHeight(direction === "up" ? distance : -distance);
+    } else {
+      applySelectedMovement(direction, distance);
+    }
+    updateDimensionOverlay();
+  };
+
+  const animateHold = (time) => {
+    if (!lastTime) lastTime = time;
+    const delta = Math.min((time - lastTime) / 1000, 0.05);
+    lastTime = time;
+    const speed = editMoveStepMeters === 0.01 ? 0.08 : 0.35;
+    applyStep(speed * delta);
+    frameId = requestAnimationFrame(animateHold);
+  };
+
+  const start = (event) => {
+    event.preventDefault();
+    if (!selectedObject) {
+      showToast("이동할 제품을 먼저 선택하세요.");
+      return;
+    }
+
+    beforeMove = snapshotScene();
+    applyStep(editMoveStepMeters);
+    holdTimer = window.setTimeout(() => {
+      lastTime = 0;
+      frameId = requestAnimationFrame(animateHold);
+    }, 280);
+
+    try {
+      el.setPointerCapture?.(event.pointerId);
+    } catch {
+      // Pointer capture is optional on mobile AR browsers.
+    }
+  };
+
+  const stop = (event) => {
+    if (holdTimer !== null) {
+      clearTimeout(holdTimer);
+      holdTimer = null;
+    }
+    if (frameId !== null) {
+      cancelAnimationFrame(frameId);
+      frameId = null;
+    }
+    lastTime = 0;
+
+    if (beforeMove) {
+      recordHistory(beforeMove);
+      beforeMove = null;
+    }
+
+    try {
+      el.releasePointerCapture?.(event.pointerId);
+    } catch {
+      // Some browsers release pointer capture automatically.
     }
   };
 
@@ -1794,6 +1865,24 @@ function toggleEditPanel() {
   updateEditPanelState();
 }
 
+function toggleEditMoveStep() {
+  editMoveStepMeters = editMoveStepMeters === 0.05 ? 0.01 : 0.05;
+  updateEditMoveStepUi();
+  showToast(`이동 단위 ${Math.round(editMoveStepMeters * 100)}cm`);
+}
+
+function updateEditMoveStepUi() {
+  const stepCm = Math.round(editMoveStepMeters * 100);
+
+  if (dom.editStepBtn) {
+    dom.editStepBtn.textContent = stepCm === 1 ? "미세 이동 1cm" : "이동 단위 5cm";
+    dom.editStepBtn.classList.toggle("fine", stepCm === 1);
+  }
+
+  if (dom.heightUp) dom.heightUp.textContent = `+ ${stepCm}cm`;
+  if (dom.heightDown) dom.heightDown.textContent = `− ${stepCm}cm`;
+}
+
 function completeEdit() {
   if (!selectedObject) return;
 
@@ -1826,11 +1915,9 @@ function updateUiFoldState() {
 }
 
 function updateEditPanelState() {
-  if (!dom.editPanel || !dom.editToggleBtn) return;
-
+  if (!dom.editPanel) return;
   dom.editPanel.classList.toggle("collapsed", !editPanelExpanded);
-  dom.editToggleBtn.textContent = editPanelExpanded ? "접기" : "펼치기";
-  dom.editToggleBtn.setAttribute("aria-expanded", String(editPanelExpanded));
+  updateEditMoveStepUi();
 }
 
 function selectByPointer(event) {
@@ -1870,7 +1957,14 @@ function moveSelected(direction) {
   }
 
   const before = snapshotScene();
-  const step = direction === "forward" || direction === "back" ? 0.01 : 0.05;
+  applySelectedMovement(direction, editMoveStepMeters);
+  updateDimensionOverlay();
+  recordHistory(before);
+}
+
+function applySelectedMovement(direction, distance) {
+  if (!selectedObject) return;
+
   const forward = new THREE.Vector3();
   camera.getWorldDirection(forward);
   forward.y = 0;
@@ -1885,18 +1979,16 @@ function moveSelected(direction) {
   const delta = new THREE.Vector3();
 
   if (direction === "forward") {
-    delta.copy(forward).multiplyScalar(step);
+    delta.copy(forward).multiplyScalar(distance);
   } else if (direction === "back") {
-    delta.copy(forward).multiplyScalar(-step);
+    delta.copy(forward).multiplyScalar(-distance);
   } else if (direction === "left") {
-    delta.copy(right).multiplyScalar(-step);
+    delta.copy(right).multiplyScalar(-distance);
   } else if (direction === "right") {
-    delta.copy(right).multiplyScalar(step);
+    delta.copy(right).multiplyScalar(distance);
   }
 
   selectedObject.position.add(delta);
-  updateDimensionOverlay();
-  recordHistory(before);
 }
 
 function rotateSelected(rad, silent = false, axis = "y") {
@@ -1927,9 +2019,14 @@ function heightSelected(dy) {
   }
 
   const before = snapshotScene();
-  selectedObject.position.y += dy;
+  applySelectedHeight(dy);
   updateDimensionOverlay();
   recordHistory(before);
+}
+
+function applySelectedHeight(dy) {
+  if (!selectedObject) return;
+  selectedObject.position.y += dy;
 }
 
 function updateDimensionOverlay() {
