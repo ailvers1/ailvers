@@ -1051,10 +1051,6 @@ body.ui-clean #calibrationLayer {
     width: auto;
   }
 
-  #calibrationPanel:not(.collapsed) ~ #editPanel {
-    display: none;
-  }
-
   select {
     min-width: 150px;
     font-size: 12px;
