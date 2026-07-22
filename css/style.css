@@ -1115,7 +1115,7 @@ body.ar-calibration-active .calibrationHandle::after {
   pointer-events: none;
 }
 
-body.ar-calibration-active .calibrationHandle[data-point-index="0"]::after { content: "내 위치"; }
+body.ar-calibration-active .calibrationHandle[data-point-index="0"]::after { content: "휴대폰"; }
 body.ar-calibration-active .calibrationHandle[data-point-index="1"]::after { content: "설치할 곳"; }
 body.ar-calibration-active .calibrationHandle[data-point-index="2"]::after { content: "천장점"; }
 
@@ -1158,6 +1158,23 @@ body.ar-calibration-active .calibrationHandle[data-point-index="1"] {
 .arCalibrationSteps span.done {
   border-color: rgba(74,222,128,.28);
   color: #bbf7d0;
+}
+
+.arCalibrationInputHelp {
+  margin: 4px 0 0 2px !important;
+  color: #71849c !important;
+  font-size: 8px !important;
+}
+
+#arPhoneHeight {
+  width: 100%;
+  min-width: 0;
+  padding: 8px 9px;
+  border: 1px solid rgba(255,255,255,.22);
+  border-radius: 9px;
+  background: rgba(255,255,255,.1);
+  color: #fff;
+  box-sizing: border-box;
 }
 
 #calibrationPanel {
