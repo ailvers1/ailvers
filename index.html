@@ -74,7 +74,7 @@
 
     <div class="row">
       <button id="placeBtn">📍 배치</button>
-      <button id="savePhotoBtn">저장</button>
+      <button id="savePhotoBtn">UI 숨기기</button>
       <button id="undoBtn">↶ 취소</button>
       <button id="redoBtn">↷ 복구</button>
       <button id="clearBtn">🗑️ 전체삭제</button>
@@ -226,6 +226,9 @@
   <div id="captureHint">
     <span>캡처: 휴대폰 전원 버튼 + 볼륨 아래 버튼</span>
   </div>
+  <div id="captureModeHint" aria-live="polite">
+    전원 + 볼륨 아래로 캡처 · 화면을 터치하면 UI가 돌아옵니다
+  </div>
   <div id="captureStrip"></div>
 
   <div id="loadingOverlay">
@@ -243,6 +246,6 @@
   }
   </script>
 
-  <script type="module" src="js/app.js?v=20260722-ar-placement2"></script>
+  <script type="module" src="js/app.js?v=20260722-capture-ui1"></script>
 </body>
 </html>
