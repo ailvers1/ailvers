@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, user-scalable=no" />
   <title>SYSMATE AR 제품 배치</title>
-  <link rel="stylesheet" href="css/style.css?v=20260722-ar-dock1" />
+  <link rel="stylesheet" href="css/style.css?v=20260722-screen-media1" />
 </head>
 <body>
   <div id="photoPreviewBg"></div>
@@ -181,6 +181,7 @@
   </section>
 
   <!-- 선택 제품 조작 패널 -->
+  <input id="screenMediaInput" type="file" accept="image/*,video/*" />
   <div id="editPanel" role="dialog" aria-label="AR 제품 조작">
     <div id="editHeader">
       <div class="editProductMeta">
@@ -189,6 +190,20 @@
         <div id="editDistance">현재 거리 -</div>
       </div>
       <button id="editDoneBtn" type="button">완료</button>
+    </div>
+
+    <div id="screenMediaBar">
+      <div class="screenMediaInfo">
+        <span class="screenMediaIcon" aria-hidden="true">▶</span>
+        <div>
+          <strong>제품 화면</strong>
+          <small id="screenMediaStatus">이미지나 영상을 넣어보세요</small>
+        </div>
+      </div>
+      <div class="screenMediaActions">
+        <button id="screenMediaChooseBtn" type="button">콘텐츠 선택</button>
+        <button id="screenMediaRemoveBtn" type="button" disabled aria-label="제품 화면 콘텐츠 제거">×</button>
+      </div>
     </div>
 
     <div id="editControls">
@@ -282,6 +297,6 @@
   }
   </script>
 
-  <script type="module" src="js/app.js?v=20260722-ar-dock1"></script>
+  <script type="module" src="js/app.js?v=20260722-screen-media1"></script>
 </body>
 </html>
