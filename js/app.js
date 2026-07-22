@@ -155,6 +155,8 @@ const PLACEMENT_WINDOW_MS = 650;
 const PLACEMENT_STABLE_MS = 450;
 const PLACEMENT_MAX_DEVIATION = 0.035;
 const PLACEMENT_JUMP_DISTANCE = 0.25;
+// Field calibration: a detected 1.8 m floor hit measured about 1.2 m in reality.
+const AR_FLOOR_DISTANCE_CORRECTION = 1.2 / 1.8;
 const PLACEMENT_NEAR_DISTANCE = 1;
 const PLACEMENT_FAR_DISTANCE = 4;
 let captureHintTimer = null;
@@ -957,9 +959,17 @@ function updatePlacementCandidate(timestamp, frame, referenceSpace, hitTestResul
 
     if (normal.y < FLOOR_NORMAL_MIN || !floorLevelOk) continue;
 
+    if (hasViewerPosition) {
+      position.x = lastViewerPosition.x
+        + (position.x - lastViewerPosition.x) * AR_FLOOR_DISTANCE_CORRECTION;
+      position.z = lastViewerPosition.z
+        + (position.z - lastViewerPosition.z) * AR_FLOOR_DISTANCE_CORRECTION;
+      matrix.setPosition(position);
+    }
+
     const distance = hasViewerPosition
       ? Math.hypot(position.x - lastViewerPosition.x, position.z - lastViewerPosition.z)
-      : position.length();
+      : position.length() * AR_FLOOR_DISTANCE_CORRECTION;
     candidates.push({ result, matrix, position, distance });
   }
 
