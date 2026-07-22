@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, user-scalable=no" />
   <title>SYSMATE AR 제품 배치</title>
-  <link rel="stylesheet" href="css/style.css?v=20260722-ar-calibration1" />
+  <link rel="stylesheet" href="css/style.css?v=20260722-ar-dock1" />
 </head>
 <body>
   <div id="photoPreviewBg"></div>
@@ -183,8 +183,8 @@
   <!-- 선택 제품 조작 패널 -->
   <div id="editPanel" role="dialog" aria-label="AR 제품 조작">
     <div id="editHeader">
-      <div>
-        <div class="editEyebrow">AR 제품 조작</div>
+      <div class="editProductMeta">
+        <div class="editEyebrow"><i></i> 선택한 제품</div>
         <div id="editTitle">선택된 제품 없음</div>
         <div id="editDistance">현재 거리 -</div>
       </div>
@@ -193,7 +193,7 @@
 
     <div id="editControls">
       <div class="editSectionHeader">
-        <span>위치 이동</span>
+        <span>위치 조정</span>
         <div class="editSectionActions">
           <button id="editStepBtn" type="button">이동 단위 5cm</button>
           <button id="placementResetBtn" type="button">처음 위치</button>
@@ -201,33 +201,34 @@
       </div>
 
       <div class="pad">
-        <button id="moveForward" aria-label="제품을 앞으로 이동"><span>▲</span>앞</button>
-        <button id="moveLeft" aria-label="제품을 왼쪽으로 이동"><span>◀</span>왼쪽</button>
-        <button id="moveRight" aria-label="제품을 오른쪽으로 이동">오른쪽<span>▶</span></button>
-        <button id="moveBack" aria-label="제품을 뒤로 이동">뒤<span>▼</span></button>
+        <button id="moveForward" aria-label="제품을 가까이 이동"><span>↑</span><b>가까이</b></button>
+        <button id="moveLeft" aria-label="제품을 왼쪽으로 이동"><span>←</span><b>왼쪽</b></button>
+        <span class="padCenter" aria-hidden="true"><i></i></span>
+        <button id="moveRight" aria-label="제품을 오른쪽으로 이동"><b>오른쪽</b><span>→</span></button>
+        <button id="moveBack" aria-label="제품을 멀리 이동"><b>멀리</b><span>↓</span></button>
       </div>
 
       <div class="editControlGroup">
         <span class="editControlLabel">방향</span>
         <div class="row small">
-          <button id="rotateLeft">⟲ 왼쪽 회전</button>
-          <button id="rotateRight">오른쪽 회전 ⟳</button>
+          <button id="rotateLeft"><span>↶</span> 왼쪽</button>
+          <button id="rotateRight">오른쪽 <span>↷</span></button>
         </div>
       </div>
 
       <div class="editControlGroup">
         <span class="editControlLabel">높이</span>
         <div class="row small">
-          <button id="heightDown">− 5cm</button>
-          <button id="heightUp">+ 5cm</button>
+          <button id="heightDown"><span>↓</span> 내리기</button>
+          <button id="heightUp"><span>↑</span> 올리기</button>
         </div>
       </div>
 
       <div class="editControlGroup">
         <span class="editControlLabel">기울임</span>
         <div class="row small tiltControls">
-          <button id="tiltUp">↑ 위로</button>
-          <button id="tiltDown">↓ 아래로</button>
+          <button id="tiltUp"><span>↟</span> 위로</button>
+          <button id="tiltDown"><span>↡</span> 아래로</button>
         </div>
       </div>
     </div>
@@ -281,6 +282,6 @@
   }
   </script>
 
-  <script type="module" src="js/app.js?v=20260722-ar-calibration1"></script>
+  <script type="module" src="js/app.js?v=20260722-ar-dock1"></script>
 </body>
 </html>
