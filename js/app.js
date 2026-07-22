@@ -12,6 +12,12 @@ const dom = {
   photoInput: $("photoInput"),
   photoPreviewHint: $("photoPreviewHint"),
   topBar: $("topBar"),
+  arCalibrationIntro: $("arCalibrationIntro"),
+  arCalibrationPanel: $("arCalibrationPanel"),
+  arCalibrationStatus: $("arCalibrationStatus"),
+  arCalibrationLength: $("arCalibrationLength"),
+  arCalibrationApplyBtn: $("arCalibrationApplyBtn"),
+  arCalibrationBadge: $("arCalibrationBadge"),
   uiFoldBtn: $("uiFoldBtn"),
   productSelect: $("productSelect"),
   loadBtn: $("loadBtn"),
@@ -112,6 +118,8 @@ let hasViewerPosition = false;
 let previewMode = false;
 let photoPreviewMode = false;
 let photoPreviewObjectUrl = null;
+let arFlowMode = "idle";
+let arCalibrationApplied = false;
 
 let products = [];
 let currentProduct = null;
@@ -344,6 +352,17 @@ function bindEvents() {
   safeClick("uiFoldBtn", toggleUiFold);
   safeClick("captureHintBtn", captureScreen);
   window.addEventListener("pointerdown", restoreCaptureUiOnPointer, true);
+  safeClick("arCalibrationStartBtn", startArCalibrationMode);
+  safeClick("arCalibrationSkipBtn", () => enterArPlacementMode(false));
+  safeClick("arCalibrationCancelBtn", () => enterArPlacementMode(false));
+  safeClick("arCalibrationRepickBtn", startArCalibrationMode);
+  safeClick("arCalibrationApplyBtn", applyArCalibration);
+
+  document.querySelectorAll("[data-ar-reference-cm]").forEach((button) => {
+    button.addEventListener("click", () => {
+      if (dom.arCalibrationLength) dom.arCalibrationLength.value = button.dataset.arReferenceCm;
+    });
+  });
 
   safeClick("clearBtn", clearAll);
 
@@ -515,6 +534,7 @@ function onCalibrationPointerDown(event) {
 
   renderCalibrationOverlay();
   refreshCalibrationReadout();
+  updateArCalibrationStatus();
 }
 
 function onCalibrationPointerMove(event) {
@@ -524,6 +544,7 @@ function onCalibrationPointerMove(event) {
   calibration.points[calibration.draggingIndex] = normalizeCalibrationPoint(event.clientX, event.clientY);
   renderCalibrationOverlay();
   refreshCalibrationReadout();
+  updateArCalibrationStatus();
 
   if (calibration.applied) {
     applyReferenceCalibration(false, false);
@@ -890,7 +911,10 @@ function resetPlacementTracking(state = "searching") {
 }
 
 function updatePlacementGuideUi(state = "searching") {
-  const guideVisible = isArSessionActive() && !previewMode && !selectedObject;
+  const guideVisible = isArSessionActive()
+    && arFlowMode === "placement"
+    && !previewMode
+    && !selectedObject;
   const states = ["searching", "wrong-surface", "unstable", "stable", "near", "far"];
 
   dom.arPlacementGuide?.classList.remove(...states);
@@ -1163,6 +1187,120 @@ function updateSelectedDistanceLabel() {
   dom.editDistance.textContent = `현재 거리 ${distance.toFixed(1)}m`;
 }
 
+function beginArCalibrationChoice() {
+  arFlowMode = "choice";
+  arCalibrationApplied = false;
+  calibration.points = [];
+  calibration.isPicking = false;
+  calibration.draggingIndex = null;
+  calibration.applied = false;
+  dom.calibrationLayer?.classList.remove("is-picking", "has-point-1", "has-point-2", "has-line");
+  document.body.classList.remove("ar-calibration-active");
+  dom.topBar?.classList.remove("show");
+  dom.arCalibrationPanel?.classList.remove("show");
+  dom.arCalibrationIntro?.classList.add("show");
+  dom.arCalibrationBadge?.classList.remove("show");
+  dom.arPlacementGuide?.classList.remove("show");
+  dom.reticle.style.display = "none";
+  reticleObject.visible = false;
+  if (placementGhost) placementGhost.visible = false;
+}
+
+function startArCalibrationMode() {
+  if (!isArSessionActive()) return;
+
+  arFlowMode = "calibration";
+  arCalibrationApplied = false;
+  calibration.points = [];
+  calibration.isPicking = true;
+  calibration.draggingIndex = null;
+  calibration.applied = false;
+  dom.arCalibrationIntro?.classList.remove("show");
+  dom.arCalibrationPanel?.classList.add("show");
+  dom.arCalibrationBadge?.classList.remove("show");
+  document.body.classList.add("ar-calibration-active");
+  dom.calibrationLayer?.classList.add("is-picking");
+  renderCalibrationOverlay();
+  updateArCalibrationStatus();
+}
+
+function updateArCalibrationStatus() {
+  if (arFlowMode !== "calibration") return;
+
+  const count = calibration.points.length;
+  if (dom.arCalibrationStatus) {
+    dom.arCalibrationStatus.textContent = count === 0
+      ? "첫 번째 점을 선택하세요."
+      : count === 1
+        ? "두 번째 점을 선택하세요."
+        : `두 점 선택 완료 · 화면 길이 ${Math.round(getCalibrationPixelLength())}px`;
+  }
+  if (dom.arCalibrationApplyBtn) dom.arCalibrationApplyBtn.disabled = count < 2;
+}
+
+function applyArCalibration() {
+  if (arFlowMode !== "calibration") return;
+
+  const pixelLength = getCalibrationPixelLength();
+  const referenceCm = Number(dom.arCalibrationLength?.value);
+
+  if (calibration.points.length < 2 || pixelLength < 24) {
+    showToast("기준점 사이를 더 넓게 지정해 주세요.");
+    return;
+  }
+  if (!Number.isFinite(referenceCm) || referenceCm <= 0) {
+    showToast("실제 길이를 0보다 크게 입력해 주세요.");
+    return;
+  }
+
+  calibration.referenceMeters = referenceCm / 100;
+  calibration.pixelLength = pixelLength;
+  calibration.pixelsPerMeter = pixelLength / calibration.referenceMeters;
+  calibration.applied = true;
+  arCalibrationApplied = true;
+  enterArPlacementMode(true);
+}
+
+function enterArPlacementMode(keepCalibration = false) {
+  if (!isArSessionActive()) return;
+
+  arFlowMode = "placement";
+  if (!keepCalibration) {
+    arCalibrationApplied = false;
+    calibration.applied = false;
+    calibration.referenceMeters = 0;
+    calibration.pixelLength = 0;
+    calibration.pixelsPerMeter = 0;
+  }
+  calibration.isPicking = false;
+  calibration.draggingIndex = null;
+  calibration.points = [];
+  document.body.classList.remove("ar-calibration-active");
+  dom.calibrationLayer?.classList.remove("is-picking");
+  renderCalibrationOverlay();
+  dom.arCalibrationIntro?.classList.remove("show");
+  dom.arCalibrationPanel?.classList.remove("show");
+  dom.arCalibrationBadge?.classList.toggle("show", arCalibrationApplied);
+  if (dom.arCalibrationBadge && arCalibrationApplied) {
+    dom.arCalibrationBadge.textContent = `✓ 실측 보정됨 · ${formatReferenceLength(calibration.referenceMeters)}`;
+  }
+  dom.topBar?.classList.add("show");
+  resetPlacementTracking("searching");
+  showToast(arCalibrationApplied ? "실측 보정 완료. 제품을 배치해 주세요." : "바닥을 비춰 제품을 배치해 주세요.");
+}
+
+function getArCalibrationScale(productHeight) {
+  if (!arCalibrationApplied || calibration.pixelsPerMeter <= 0 || placementDistanceMeters <= 0) return 1;
+
+  const projectionScaleY = Math.abs(camera.projectionMatrix.elements[5]);
+  if (!Number.isFinite(projectionScaleY) || projectionScaleY < 0.0001) return 1;
+
+  const targetPixelHeight = productHeight * calibration.pixelsPerMeter;
+  const visibleWorldHeight = (2 * placementDistanceMeters) / projectionScaleY;
+  const targetWorldHeight = visibleWorldHeight * (targetPixelHeight / Math.max(window.innerHeight, 1));
+  return THREE.MathUtils.clamp(targetWorldHeight / Math.max(productHeight, 0.0001), 0.5, 2);
+}
+
 async function startAR() {
   console.log("AR 시작 버튼 클릭됨");
 
@@ -1205,11 +1343,9 @@ async function startAR() {
     orbitControls.enabled = false;
     previewGrid.visible = false;
     dom.startScreen.classList.add("hidden");
-    dom.topBar.classList.add("show");
     dom.reticle.style.display = "none";
     if (dom.savePhotoBtn) dom.savePhotoBtn.textContent = "UI 숨기기";
-
-    showToast(`AR 시작됨. 바닥을 비춰주세요. (${arReferenceSpaceType})`);
+    beginArCalibrationChoice();
 
     session.addEventListener("end", () => {
       hitTestSourceRequested = false;
@@ -1220,6 +1356,20 @@ async function startAR() {
       resetPlacementTracking("searching");
       dom.reticle.style.display = "none";
       dom.arPlacementGuide?.classList.remove("show");
+      arFlowMode = "idle";
+      arCalibrationApplied = false;
+      calibration.applied = false;
+      calibration.referenceMeters = 0;
+      calibration.pixelLength = 0;
+      calibration.pixelsPerMeter = 0;
+      calibration.points = [];
+      calibration.isPicking = false;
+      calibration.draggingIndex = null;
+      renderCalibrationOverlay();
+      document.body.classList.remove("ar-calibration-active");
+      dom.arCalibrationIntro?.classList.remove("show");
+      dom.arCalibrationPanel?.classList.remove("show");
+      dom.arCalibrationBadge?.classList.remove("show");
       exitCaptureUiMode(false);
       if (dom.placeBtn) {
         dom.placeBtn.disabled = false;
@@ -1391,7 +1541,9 @@ async function placeCurrentProduct() {
 
     rememberDefaultRotation(model);
 
-    applyUserScale(model, dom.lockScale.checked ? 1 : Number(dom.scaleRange.value) / 100);
+    const requestedScale = dom.lockScale.checked ? 1 : Number(dom.scaleRange.value) / 100;
+    const calibratedScale = requestedScale * getArCalibrationScale(Number(currentProduct.height) || 1);
+    applyUserScale(model, calibratedScale);
 
     model.userData.productId = currentProduct.id;
     model.userData.productName = currentProduct.name;
@@ -1409,7 +1561,7 @@ async function placeCurrentProduct() {
       showCapturePrompt();
     }
 
-    showToast(`${currentProduct.name} 배치 완료. 화면저장을 눌러 촬영하세요.`);
+    showToast(`${currentProduct.name} 배치 완료. UI 숨기기로 화면을 정리할 수 있습니다.`);
   } catch (err) {
     console.error(err);
     showToast("모델 배치 실패");
@@ -2908,12 +3060,16 @@ function render(timestamp, frame) {
       hitTestSourceRequested = true;
     }
 
-    if (hitTestSource) {
+    if (hitTestSource && arFlowMode === "placement") {
       const hitTestResults = frame.getHitTestResults(hitTestSource);
       updatePlacementCandidate(timestamp, frame, referenceSpace, hitTestResults);
       if (pendingAnchorObject && placementStable) {
         requestPendingPlacementAnchor(currentHitTestResult);
       }
+    } else if (arFlowMode !== "placement") {
+      reticleObject.visible = false;
+      if (placementGhost) placementGhost.visible = false;
+      dom.reticle.style.display = "none";
     }
   }
 
