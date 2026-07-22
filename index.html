@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, user-scalable=no" />
   <title>SYSMATE AR 제품 배치</title>
-  <link rel="stylesheet" href="css/style.css?v=20260722-screen-media1" />
+  <link rel="stylesheet" href="css/style.css?v=20260722-three-point1" />
 </head>
 <body>
   <div id="photoPreviewBg"></div>
@@ -50,10 +50,10 @@
 
   <!-- AR 실제 크기 맞추기: 한 AR 세션 안에서 선택적으로 진행 -->
   <section id="arCalibrationIntro" class="arCalibrationCard" role="dialog" aria-modal="true" aria-labelledby="arCalibrationIntroTitle">
-    <span class="arCalibrationEyebrow">선택 단계</span>
-    <h2 id="arCalibrationIntroTitle">실제 크기 맞추기</h2>
-    <p>문이나 타일처럼 크기를 알고 있는 물체를 기준으로 제품 크기를 더 정확하게 맞출 수 있어요.</p>
-    <small>기준 물체는 제품을 놓을 위치와 같은 평면에서 선택해 주세요.</small>
+    <span class="arCalibrationEyebrow">선택 사항</span>
+    <h2 id="arCalibrationIntroTitle">공간 높이 맞추기</h2>
+    <p>내 위치와 설치할 곳, 천장 높이를 지정하면 공간에 맞춰 제품 높이를 보정합니다.</p>
+    <small>생략해도 AR 배치는 바로 사용할 수 있어요.</small>
     <div class="arCalibrationActions">
       <button id="arCalibrationStartBtn" type="button" class="primary">크기 맞추기</button>
       <button id="arCalibrationSkipBtn" type="button">건너뛰고 바로 배치</button>
@@ -61,21 +61,21 @@
   </section>
 
   <section id="arCalibrationPanel" class="arCalibrationCard" role="dialog" aria-modal="true" aria-labelledby="arCalibrationTitle">
-    <span class="arCalibrationEyebrow">실측 맞춤</span>
-    <h2 id="arCalibrationTitle">기준 물체의 두 점을 찍어주세요</h2>
-    <p id="arCalibrationStatus">첫 번째 점을 선택하세요.</p>
-    <div class="arCalibrationPresets" aria-label="기준 길이 예시">
-      <button type="button" data-ar-reference-cm="210">문 210cm</button>
-      <button type="button" data-ar-reference-cm="60">타일 60cm</button>
-      <button type="button" data-ar-reference-cm="72">책상 72cm</button>
+    <span class="arCalibrationEyebrow">3점 공간 보정</span>
+    <h2 id="arCalibrationTitle">설치 위치와 천장점을 지정하세요</h2>
+    <div class="arCalibrationSteps" aria-label="공간 보정 단계">
+      <span data-ar-step="0">1 내 위치</span>
+      <span data-ar-step="1">2 설치할 곳</span>
+      <span data-ar-step="2">3 천장점</span>
     </div>
+    <p id="arCalibrationStatus">내 위치를 확인하는 중입니다.</p>
     <label class="arCalibrationInput" for="arCalibrationLength">
-      <span>실제 길이</span>
-      <input id="arCalibrationLength" type="number" min="1" step="0.1" inputmode="decimal" value="210" />
+      <span>실제 천장고</span>
+      <input id="arCalibrationLength" type="number" min="100" step="1" inputmode="decimal" value="240" />
       <b>cm</b>
     </label>
     <div class="arCalibrationActions compact">
-      <button id="arCalibrationRepickBtn" type="button">두 점 다시 선택</button>
+      <button id="arCalibrationRepickBtn" type="button">세 점 다시 지정</button>
       <button id="arCalibrationApplyBtn" type="button" class="primary" disabled>보정 완료</button>
     </div>
     <button id="arCalibrationCancelBtn" type="button" class="arCalibrationTextButton">건너뛰고 바로 배치</button>
@@ -120,9 +120,11 @@
   <div id="calibrationLayer" aria-hidden="true">
     <svg id="calibrationSvg" viewBox="0 0 100 100" preserveAspectRatio="none">
       <line id="calibrationLine" x1="0" y1="0" x2="0" y2="0"></line>
+      <line id="calibrationDistanceLine" x1="0" y1="0" x2="0" y2="0"></line>
     </svg>
-    <button class="calibrationHandle" data-point-index="0" type="button" aria-label="기준점 1"></button>
-    <button class="calibrationHandle" data-point-index="1" type="button" aria-label="기준점 2"></button>
+    <button class="calibrationHandle" data-point-index="0" type="button" aria-label="내 위치"></button>
+    <button class="calibrationHandle" data-point-index="1" type="button" aria-label="설치할 곳"></button>
+    <button class="calibrationHandle" data-point-index="2" type="button" aria-label="천장점"></button>
   </div>
 
   <section id="calibrationPanel" aria-label="기준 길이 설정">
@@ -135,14 +137,7 @@
     </div>
 
     <div id="calibrationBody">
-      <p class="calibrationGuide">기준 물체는 제품 설치 위치와 같은 평면에서 선택해 주세요.</p>
-
-      <div class="calibrationPresets" aria-label="기준 길이 예시">
-        <button type="button" data-reference-cm="210">문 210cm</button>
-        <button type="button" data-reference-cm="29.7">A4 29.7cm</button>
-        <button type="button" data-reference-cm="60">타일 60cm</button>
-        <button type="button" data-reference-cm="72">책상 72cm</button>
-      </div>
+      <p class="calibrationGuide">화면에서 두 지점을 지정하고 실제 길이를 입력해 주세요.</p>
 
       <div class="calibrationRow">
         <button id="calibrationPickBtn" type="button">두 점 선택</button>
@@ -297,6 +292,6 @@
   }
   </script>
 
-  <script type="module" src="js/app.js?v=20260722-screen-media1"></script>
+  <script type="module" src="js/app.js?v=20260722-three-point1"></script>
 </body>
 </html>
