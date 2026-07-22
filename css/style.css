@@ -1183,3 +1183,125 @@ body.ui-clean #calibrationLayer {
     overflow-y: auto;
   }
 }
+
+/* Compact AR controls: roughly one third of the previous screen footprint. */
+#editPanel {
+  width: min(310px, calc(100vw - 16px));
+  max-height: min(250px, calc(100dvh - 16px));
+  bottom: calc(env(safe-area-inset-bottom, 0px) + 8px);
+  gap: 6px;
+  padding: 8px;
+  border-radius: 16px;
+}
+
+#editHeader {
+  gap: 8px;
+}
+
+.editEyebrow {
+  margin-bottom: 1px;
+  font-size: 8px;
+}
+
+#editTitle {
+  font-size: 12px;
+}
+
+#editDoneBtn {
+  min-width: 48px;
+  min-height: 28px;
+  padding: 5px 9px;
+  font-size: 10px;
+}
+
+#editControls {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  grid-template-rows: auto repeat(3, auto);
+  gap: 5px 7px;
+}
+
+.editSectionHeader {
+  grid-column: 1 / -1;
+  grid-row: 1;
+  gap: 6px;
+  font-size: 10px;
+}
+
+#editStepBtn {
+  padding: 4px 7px;
+  font-size: 9px;
+}
+
+.pad {
+  grid-column: 1;
+  grid-row: 2 / span 3;
+  grid-template-columns: repeat(3, minmax(36px, 1fr));
+  grid-template-rows: repeat(3, 36px);
+  gap: 4px;
+}
+
+.pad button {
+  height: 36px;
+  padding: 0 3px;
+  border-radius: 10px;
+  font-size: 0;
+}
+
+.pad button span {
+  font-size: 14px;
+}
+
+#editControls > .editControlGroup {
+  grid-column: 2;
+  gap: 3px;
+}
+
+#editControls > .editControlGroup:nth-child(3) {
+  grid-row: 2;
+}
+
+#editControls > .editControlGroup:nth-child(4) {
+  grid-row: 3;
+}
+
+#editControls > .editControlGroup:nth-child(5) {
+  grid-row: 4;
+}
+
+.editControlLabel {
+  font-size: 8px;
+}
+
+#editControls .row.small {
+  gap: 4px;
+}
+
+#editControls .row.small button {
+  min-height: 29px;
+  padding: 4px 3px;
+  border-radius: 9px;
+  font-size: 9px;
+  line-height: 1.1;
+}
+
+@media (orientation: landscape) and (max-height: 540px) {
+  #editPanel {
+    width: min(310px, calc(100vw - 16px));
+    max-height: calc(100dvh - 16px);
+    bottom: calc(env(safe-area-inset-bottom, 0px) + 8px);
+    padding: 8px;
+    gap: 6px;
+  }
+
+  .pad {
+    grid-template-columns: repeat(3, minmax(36px, 1fr));
+    grid-template-rows: repeat(3, 36px);
+    gap: 4px;
+  }
+
+  .pad button {
+    height: 36px;
+    border-radius: 10px;
+  }
+}
