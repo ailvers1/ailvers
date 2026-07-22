@@ -25,11 +25,19 @@ const dom = {
   scaleValue: $("scaleValue"),
   dimensionToggle: $("dimensionToggle"),
   reticle: $("reticle"),
+  arPlacementGuide: $("arPlacementGuide"),
+  placementStatusText: $("placementStatusText"),
+  placementDistance: $("placementDistance"),
+  placementProductSize: $("placementProductSize"),
+  placementStability: $("placementStability"),
+  placementHelp: $("placementHelp"),
   editPanel: $("editPanel"),
   editHeader: $("editHeader"),
   editTitle: $("editTitle"),
+  editDistance: $("editDistance"),
   editDoneBtn: $("editDoneBtn"),
   editStepBtn: $("editStepBtn"),
+  placementResetBtn: $("placementResetBtn"),
   editControls: $("editControls"),
   toast: $("toast"),
   captureHint: $("captureHint"),
@@ -81,6 +89,8 @@ let camera;
 let controller;
 let orbitControls;
 let reticleObject;
+let placementGhost;
+let placementGhostMaterial;
 let previewGrid;
 
 let hitTestSource = null;
@@ -88,6 +98,16 @@ let hitTestSourceRequested = false;
 let arReferenceSpaceType = "local";
 const smoothedReticlePosition = new THREE.Vector3();
 let hasSmoothedReticlePosition = false;
+let placementSamples = [];
+let placementStable = false;
+let placementDistanceMeters = 0;
+let placementStabilityProgress = 0;
+let currentHitTestResult = null;
+let pendingAnchorObject = null;
+let anchorRequestInFlight = false;
+const lastStablePlacementMatrix = new THREE.Matrix4();
+const lastViewerPosition = new THREE.Vector3();
+let hasViewerPosition = false;
 let previewMode = false;
 let photoPreviewMode = false;
 let photoPreviewObjectUrl = null;
@@ -130,6 +150,13 @@ const TEXTURE_SWAP_MS = 3000;
 const TEXTURE_FADE_MS = 320;
 const CAPTURE_HINT_MS = 4200;
 const DIMENSION_COLOR = 0x38bdf8;
+const FLOOR_NORMAL_MIN = Math.cos(THREE.MathUtils.degToRad(18));
+const PLACEMENT_WINDOW_MS = 650;
+const PLACEMENT_STABLE_MS = 450;
+const PLACEMENT_MAX_DEVIATION = 0.035;
+const PLACEMENT_JUMP_DISTANCE = 0.25;
+const PLACEMENT_NEAR_DISTANCE = 1;
+const PLACEMENT_FAR_DISTANCE = 4;
 let captureHintTimer = null;
 const AI_KIOSK_TEXTURES = {
   screenMeshNames: new Set([
@@ -243,6 +270,41 @@ function setupReticle() {
   reticleObject.matrixAutoUpdate = false;
   reticleObject.visible = false;
   scene.add(reticleObject);
+
+  placementGhost = new THREE.Group();
+  placementGhost.name = "AR real-size placement preview";
+  placementGhost.visible = false;
+  scene.add(placementGhost);
+}
+
+function updatePlacementGhostDimensions() {
+  if (!placementGhost) return;
+
+  for (const child of [...placementGhost.children]) {
+    placementGhost.remove(child);
+    child.geometry?.dispose?.();
+    child.material?.dispose?.();
+  }
+
+  if (!currentProduct) return;
+
+  const width = Math.max(Number(currentProduct.width) || 0.5, 0.05);
+  const height = Math.max(Number(currentProduct.height) || 1, 0.05);
+  const depth = Math.max(Number(currentProduct.depth) || 0.5, 0.05);
+  const boxGeometry = new THREE.BoxGeometry(width, height, depth);
+  boxGeometry.translate(0, height / 2, 0);
+  const edges = new THREE.EdgesGeometry(boxGeometry);
+
+  placementGhostMaterial = new THREE.LineBasicMaterial({
+    color: 0xfbbf24,
+    transparent: true,
+    opacity: 0.78,
+    depthTest: false
+  });
+
+  const outline = new THREE.LineSegments(edges, placementGhostMaterial);
+  outline.renderOrder = 250;
+  placementGhost.add(outline);
 }
 
 function setupPreviewHelpers() {
@@ -272,6 +334,7 @@ function bindEvents() {
   safeClick("redoBtn", redoLastAction);
   safeClick("editDoneBtn", completeEdit);
   safeClick("editStepBtn", toggleEditMoveStep);
+  safeClick("placementResetBtn", resetSelectedPlacement);
   safeClick("uiFoldBtn", toggleUiFold);
   safeClick("captureHintBtn", captureScreen);
 
@@ -294,6 +357,8 @@ function bindEvents() {
     dom.productSelect.addEventListener("change", () => {
       const id = dom.productSelect.value;
       currentProduct = products.find((p) => p.id === id) || null;
+      updatePlacementGhostDimensions();
+      updatePlacementGuideUi("searching");
       showToast(`${currentProduct?.name || "제품"} 선택됨`);
 
       if (previewMode) {
@@ -794,11 +859,293 @@ async function loadManifest() {
       dom.productSelect.value = currentProduct.id;
     }
 
+    updatePlacementGhostDimensions();
+    updatePlacementGuideUi("searching");
+
     showToast("제품 목록 로드 완료");
   } catch (err) {
     console.error(err);
     showToast("manifest.json을 불러오지 못했습니다.");
   }
+}
+
+function resetPlacementTracking(state = "searching") {
+  placementSamples = [];
+  placementStable = false;
+  placementDistanceMeters = 0;
+  placementStabilityProgress = 0;
+  currentHitTestResult = null;
+  hasSmoothedReticlePosition = false;
+  reticleObject.visible = false;
+  if (placementGhost) placementGhost.visible = false;
+  if (dom.reticle) dom.reticle.style.display = "none";
+  updatePlacementGuideUi(state);
+}
+
+function updatePlacementGuideUi(state = "searching") {
+  const guideVisible = isArSessionActive() && !previewMode && !selectedObject;
+  const states = ["searching", "wrong-surface", "unstable", "stable", "near", "far"];
+
+  dom.arPlacementGuide?.classList.remove(...states);
+  dom.arPlacementGuide?.classList.add(state);
+  dom.arPlacementGuide?.classList.toggle("show", guideVisible);
+  dom.reticle?.classList.remove(...states);
+  dom.reticle?.classList.add(state);
+
+  const labels = {
+    searching: ["바닥을 찾는 중", "휴대폰을 천천히 움직여 바닥을 인식해 주세요."],
+    "wrong-surface": ["바닥이 아닙니다", "화면 중앙을 설치할 바닥 쪽으로 이동해 주세요."],
+    unstable: ["위치를 확인하는 중", "초록색이 될 때까지 휴대폰을 잠시 고정해 주세요."],
+    stable: ["배치 위치 확인 완료", "실측 윤곽을 확인한 뒤 배치하세요."],
+    near: ["배치 가능 · 거리가 가깝습니다", "1~4m 거리에서 보면 실제 크기를 더 쉽게 비교할 수 있습니다."],
+    far: ["배치 가능 · 거리가 멉니다", "4m 이내에서 배치하면 크기 확인이 더 정확합니다."]
+  };
+  const [title, help] = labels[state] || labels.searching;
+
+  if (dom.placementStatusText) dom.placementStatusText.textContent = title;
+  if (dom.placementHelp) dom.placementHelp.textContent = help;
+  if (dom.placementDistance) {
+    dom.placementDistance.textContent = placementDistanceMeters > 0
+      ? `설치 거리 ${placementDistanceMeters.toFixed(1)}m`
+      : "설치 거리 -";
+  }
+  if (dom.placementProductSize) {
+    const heightCm = Math.round((Number(currentProduct?.height) || 0) * 100);
+    dom.placementProductSize.textContent = heightCm ? `제품 높이 ${heightCm}cm` : "제품 높이 -";
+  }
+
+  const stabilityFill = dom.placementStability?.querySelector("i");
+  if (stabilityFill) stabilityFill.style.width = `${Math.round(placementStabilityProgress * 100)}%`;
+
+  if (placementGhostMaterial) {
+    const color = state === "stable"
+      ? 0x34d399
+      : state === "near" || state === "far" || state === "unstable"
+        ? 0xfbbf24
+        : 0xfb7185;
+    placementGhostMaterial.color.setHex(color);
+  }
+
+  if (dom.placeBtn && isArSessionActive() && !previewMode) {
+    dom.placeBtn.disabled = !placementStable;
+    dom.placeBtn.textContent = placementStable ? "📍 이 위치에 배치" : "바닥 인식 중";
+  }
+}
+
+function updatePlacementCandidate(timestamp, frame, referenceSpace, hitTestResults) {
+  const viewerPose = frame.getViewerPose(referenceSpace);
+
+  if (viewerPose) {
+    const p = viewerPose.transform.position;
+    lastViewerPosition.set(p.x, p.y, p.z);
+    hasViewerPosition = true;
+  }
+
+  const candidates = [];
+  for (const result of hitTestResults) {
+    const pose = result.getPose(referenceSpace);
+    if (!pose) continue;
+
+    const matrix = new THREE.Matrix4().fromArray(pose.transform.matrix);
+    const position = new THREE.Vector3().setFromMatrixPosition(matrix);
+    const normal = new THREE.Vector3(
+      matrix.elements[4],
+      matrix.elements[5],
+      matrix.elements[6]
+    ).normalize();
+    const floorLevelOk = arReferenceSpaceType !== "local-floor" || Math.abs(position.y) <= 0.35;
+
+    if (normal.y < FLOOR_NORMAL_MIN || !floorLevelOk) continue;
+
+    const distance = hasViewerPosition
+      ? Math.hypot(position.x - lastViewerPosition.x, position.z - lastViewerPosition.z)
+      : position.length();
+    candidates.push({ result, matrix, position, distance });
+  }
+
+  if (!candidates.length) {
+    placementSamples = [];
+    placementStable = false;
+    placementStabilityProgress = 0;
+    currentHitTestResult = null;
+    reticleObject.visible = false;
+    if (placementGhost) placementGhost.visible = false;
+    dom.reticle.style.display = "none";
+    updatePlacementGuideUi(hitTestResults.length ? "wrong-surface" : "searching");
+    return;
+  }
+
+  candidates.sort((a, b) => a.distance - b.distance);
+  const candidate = candidates[0];
+  placementDistanceMeters = candidate.distance;
+  currentHitTestResult = candidate.result;
+
+  const previous = placementSamples[placementSamples.length - 1];
+  if (previous && previous.position.distanceTo(candidate.position) > PLACEMENT_JUMP_DISTANCE) {
+    placementSamples = [];
+  }
+
+  placementSamples.push({ time: timestamp, position: candidate.position.clone() });
+  placementSamples = placementSamples.filter((sample) => timestamp - sample.time <= PLACEMENT_WINDOW_MS);
+
+  const mean = new THREE.Vector3();
+  for (const sample of placementSamples) mean.add(sample.position);
+  mean.multiplyScalar(1 / placementSamples.length);
+
+  let squaredError = 0;
+  for (const sample of placementSamples) squaredError += sample.position.distanceToSquared(mean);
+  const rmsDeviation = Math.sqrt(squaredError / placementSamples.length);
+  const sampleDuration = placementSamples.length > 1
+    ? timestamp - placementSamples[0].time
+    : 0;
+  const timeProgress = THREE.MathUtils.clamp(sampleDuration / PLACEMENT_STABLE_MS, 0, 1);
+  const qualityProgress = THREE.MathUtils.clamp(1 - rmsDeviation / PLACEMENT_MAX_DEVIATION, 0, 1);
+  placementStabilityProgress = Math.min(timeProgress, qualityProgress);
+  placementStable = placementSamples.length >= 8
+    && sampleDuration >= PLACEMENT_STABLE_MS
+    && rmsDeviation <= PLACEMENT_MAX_DEVIATION;
+
+  if (
+    !hasSmoothedReticlePosition ||
+    smoothedReticlePosition.distanceToSquared(candidate.position) > PLACEMENT_JUMP_DISTANCE ** 2
+  ) {
+    smoothedReticlePosition.copy(candidate.position);
+    hasSmoothedReticlePosition = true;
+  } else {
+    smoothedReticlePosition.lerp(candidate.position, placementStable ? 0.18 : 0.3);
+  }
+
+  const hitMatrix = candidate.matrix.clone();
+  hitMatrix.setPosition(smoothedReticlePosition);
+  const previewVisible = !selectedObject;
+  reticleObject.visible = previewVisible;
+  reticleObject.matrix.copy(hitMatrix);
+  dom.reticle.style.display = previewVisible ? "block" : "none";
+
+  if (placementStable) lastStablePlacementMatrix.copy(hitMatrix);
+
+  if (placementGhost) {
+    placementGhost.visible = previewVisible;
+    placementGhost.position.copy(smoothedReticlePosition);
+    if (hasViewerPosition) {
+      placementGhost.rotation.set(
+        0,
+        Math.atan2(
+          lastViewerPosition.x - smoothedReticlePosition.x,
+          lastViewerPosition.z - smoothedReticlePosition.z
+        ),
+        0
+      );
+    }
+  }
+
+  let state = "unstable";
+  if (placementStable) {
+    if (placementDistanceMeters < PLACEMENT_NEAR_DISTANCE) state = "near";
+    else if (placementDistanceMeters > PLACEMENT_FAR_DISTANCE) state = "far";
+    else state = "stable";
+  }
+  updatePlacementGuideUi(state);
+}
+
+function queuePlacementAnchor(model) {
+  pendingAnchorObject = model;
+}
+
+function requestPendingPlacementAnchor(hitResult) {
+  if (!pendingAnchorObject || anchorRequestInFlight) return;
+  if (!hitResult || typeof hitResult.createAnchor !== "function") {
+    pendingAnchorObject = null;
+    return;
+  }
+
+  const target = pendingAnchorObject;
+  pendingAnchorObject = null;
+  anchorRequestInFlight = true;
+
+  hitResult.createAnchor().then((anchor) => {
+    if (!placedObjects.includes(target)) {
+      anchor.delete?.();
+      return;
+    }
+    target.userData.xrAnchor = anchor;
+    target.userData.anchorOffset = null;
+  }).catch((err) => {
+    console.warn("AR anchor unavailable; keeping local placement.", err);
+  }).finally(() => {
+    anchorRequestInFlight = false;
+  });
+}
+
+function updateAnchoredObjects(frame, referenceSpace) {
+  for (const object of placedObjects) {
+    const anchor = object.userData.xrAnchor;
+    if (!anchor?.anchorSpace) continue;
+    const pose = frame.getPose(anchor.anchorSpace, referenceSpace);
+    if (!pose) continue;
+
+    const anchorMatrix = new THREE.Matrix4().fromArray(pose.transform.matrix);
+    if (!object.userData.anchorOffset) {
+      object.updateMatrix();
+      object.userData.anchorOffset = anchorMatrix.clone().invert().multiply(object.matrix.clone());
+    }
+
+    const worldMatrix = anchorMatrix.clone().multiply(object.userData.anchorOffset);
+    worldMatrix.decompose(object.position, object.quaternion, object.scale);
+  }
+}
+
+function releaseObjectAnchor(object) {
+  const anchor = object?.userData?.xrAnchor;
+  if (!anchor) return;
+  try {
+    anchor.delete?.();
+  } catch {
+    // The XR session may already have released the anchor.
+  }
+  object.userData.xrAnchor = null;
+  object.userData.anchorOffset = null;
+}
+
+function rememberInitialPlacement(object) {
+  object.userData.initialPlacement = {
+    position: object.position.toArray(),
+    quaternion: object.quaternion.toArray(),
+    scale: object.scale.toArray()
+  };
+}
+
+function resetSelectedPlacement() {
+  const initial = selectedObject?.userData?.initialPlacement;
+  if (!selectedObject || !initial) {
+    showToast("처음 배치 위치가 없습니다.");
+    return;
+  }
+
+  const before = snapshotScene();
+  releaseObjectAnchor(selectedObject);
+  selectedObject.position.fromArray(initial.position);
+  selectedObject.quaternion.fromArray(initial.quaternion);
+  selectedObject.scale.fromArray(initial.scale);
+  updateDimensionOverlay();
+  updateSelectedDistanceLabel();
+  recordHistory(before);
+  showToast("처음 배치 위치로 되돌렸습니다.");
+}
+
+function updateSelectedDistanceLabel() {
+  if (!dom.editDistance) return;
+  if (!selectedObject || !hasViewerPosition || photoPreviewMode) {
+    dom.editDistance.textContent = photoPreviewMode && selectedObject ? "사진 위 배치" : "현재 거리 -";
+    return;
+  }
+
+  const position = selectedObject.getWorldPosition(new THREE.Vector3());
+  const distance = Math.hypot(
+    position.x - lastViewerPosition.x,
+    position.z - lastViewerPosition.z
+  );
+  dom.editDistance.textContent = `현재 거리 ${distance.toFixed(1)}m`;
 }
 
 async function startAR() {
@@ -821,7 +1168,7 @@ async function startAR() {
 
     const session = await navigator.xr.requestSession("immersive-ar", {
       requiredFeatures: ["hit-test"],
-      optionalFeatures: ["dom-overlay", "local-floor"],
+      optionalFeatures: ["dom-overlay", "local-floor", "anchors"],
       domOverlay: { root: document.body }
     });
 
@@ -837,22 +1184,30 @@ async function startAR() {
     dom.calibrationLayer?.classList.remove("is-picking");
     uiFolded = false;
     updateUiFoldState();
+    resetPlacementTracking("searching");
     dom.photoPreviewBg?.classList.remove("show");
     dom.photoPreviewHint?.classList.remove("show");
     orbitControls.enabled = false;
     previewGrid.visible = false;
     dom.startScreen.classList.add("hidden");
     dom.topBar.classList.add("show");
-    dom.reticle.style.display = "block";
+    dom.reticle.style.display = "none";
 
     showToast(`AR 시작됨. 바닥을 비춰주세요. (${arReferenceSpaceType})`);
 
     session.addEventListener("end", () => {
       hitTestSourceRequested = false;
       hitTestSource = null;
-      hasSmoothedReticlePosition = false;
-      reticleObject.visible = false;
+      pendingAnchorObject = null;
+      anchorRequestInFlight = false;
+      for (const object of placedObjects) releaseObjectAnchor(object);
+      resetPlacementTracking("searching");
       dom.reticle.style.display = "none";
+      dom.arPlacementGuide?.classList.remove("show");
+      if (dom.placeBtn) {
+        dom.placeBtn.disabled = false;
+        dom.placeBtn.textContent = "📍 배치";
+      }
       uiFolded = false;
       updateUiFoldState();
       dom.topBar.classList.remove("show");
@@ -911,7 +1266,7 @@ async function startPreview(message) {
   photoPreviewMode = true;
   hitTestSourceRequested = false;
   hitTestSource = null;
-  reticleObject.visible = false;
+  resetPlacementTracking("searching");
   previewGrid.visible = false;
   orbitControls.enabled = false;
   uiFolded = false;
@@ -920,6 +1275,11 @@ async function startPreview(message) {
   dom.startScreen.classList.add("hidden");
   dom.topBar.classList.add("show");
   dom.reticle.style.display = "none";
+  dom.arPlacementGuide?.classList.remove("show");
+  if (dom.placeBtn) {
+    dom.placeBtn.disabled = false;
+    dom.placeBtn.textContent = "📍 배치";
+  }
   dom.photoPreviewBg?.classList.add("show");
   dom.photoPreviewHint?.classList.add("show");
   document.body.classList.add("photo-calibration-available");
@@ -993,8 +1353,8 @@ async function placeCurrentProduct() {
     return;
   }
 
-  if (!reticleObject.visible) {
-    showToast("바닥 인식 후 배치해주세요.");
+  if (!reticleObject.visible || !placementStable) {
+    showToast("초록색 배치 위치가 표시될 때까지 잠시 기다려주세요.");
     return;
   }
 
@@ -1004,7 +1364,7 @@ async function placeCurrentProduct() {
     const model = await loadModel(currentProduct);
 
     model.matrixAutoUpdate = true;
-    model.position.setFromMatrixPosition(reticleObject.matrix);
+    model.position.setFromMatrixPosition(lastStablePlacementMatrix);
     faceModelToCamera(model);
 
     if (currentProduct.rotationYDeg) {
@@ -1017,9 +1377,12 @@ async function placeCurrentProduct() {
 
     model.userData.productId = currentProduct.id;
     model.userData.productName = currentProduct.name;
+    model.userData.placementDistance = placementDistanceMeters;
+    rememberInitialPlacement(model);
 
     scene.add(model);
     placedObjects.push(model);
+    queuePlacementAnchor(model);
     recordHistory(before);
     uiFolded = true;
     updateUiFoldState();
@@ -1223,6 +1586,7 @@ function getScaleBasis(size, axis) {
 }
 
 function applyUserScale(model, userScale = 1) {
+  if (model?.userData?.xrAnchor) releaseObjectAnchor(model);
   const baseScale = getBaseScale(model);
   const nextUserScale = THREE.MathUtils.clamp(userScale, 0.25, 5);
   model.userData.userScale = nextUserScale;
@@ -1490,6 +1854,8 @@ function selectObject(obj) {
   if (!obj) {
     dom.editPanel.classList.remove("show");
     dom.editTitle.textContent = "선택된 제품 없음";
+    updateSelectedDistanceLabel();
+    updatePlacementGuideUi(placementStable ? "stable" : "unstable");
     hideObjectControlsOverlay();
     refreshCalibrationReadout();
     return;
@@ -1497,6 +1863,8 @@ function selectObject(obj) {
 
   dom.editPanel.classList.add("show");
   dom.editTitle.textContent = obj.userData.productName || "선택된 제품";
+  updateSelectedDistanceLabel();
+  dom.arPlacementGuide?.classList.remove("show");
   editPanelExpanded = !photoPreviewMode;
   updateEditPanelState();
 
@@ -1964,6 +2332,7 @@ function moveSelected(direction) {
 
 function applySelectedMovement(direction, distance) {
   if (!selectedObject) return;
+  releaseObjectAnchor(selectedObject);
 
   const forward = new THREE.Vector3();
   camera.getWorldDirection(forward);
@@ -1989,6 +2358,7 @@ function applySelectedMovement(direction, distance) {
   }
 
   selectedObject.position.add(delta);
+  updateSelectedDistanceLabel();
 }
 
 function rotateSelected(rad, silent = false, axis = "y") {
@@ -1998,6 +2368,8 @@ function rotateSelected(rad, silent = false, axis = "y") {
     }
     return;
   }
+
+  releaseObjectAnchor(selectedObject);
 
   if (axis === "x") {
     const tiltLimit = THREE.MathUtils.degToRad(60);
@@ -2026,7 +2398,9 @@ function heightSelected(dy) {
 
 function applySelectedHeight(dy) {
   if (!selectedObject) return;
+  releaseObjectAnchor(selectedObject);
   selectedObject.position.y += dy;
+  updateSelectedDistanceLabel();
 }
 
 function updateDimensionOverlay() {
@@ -2205,10 +2579,12 @@ function clearPlacedObjects() {
   if (dom.editTitle) dom.editTitle.textContent = "선택된 제품 없음";
 
   for (const obj of placedObjects) {
+    releaseObjectAnchor(obj);
     scene.remove(obj);
   }
 
   placedObjects = [];
+  pendingAnchorObject = null;
 }
 
 function snapshotScene() {
@@ -2291,6 +2667,7 @@ async function restoreScene(snapshot) {
       model.userData.userScale = model.scale.x / baseScale.x;
       model.userData.productId = item.productId;
       model.userData.productName = item.productName || product.name;
+      rememberInitialPlacement(model);
 
       scene.add(model);
       placedObjects.push(model);
@@ -2454,6 +2831,10 @@ function render(timestamp, frame) {
 
   if (frame) {
     const session = renderer.xr.getSession();
+    const referenceSpace = renderer.xr.getReferenceSpace();
+
+    updateAnchoredObjects(frame, referenceSpace);
+    updateSelectedDistanceLabel();
 
     if (!hitTestSourceRequested) {
       getHitTestReferenceSpace(session).then((referenceSpace) => {
@@ -2474,42 +2855,10 @@ function render(timestamp, frame) {
     }
 
     if (hitTestSource) {
-      const referenceSpace = renderer.xr.getReferenceSpace();
       const hitTestResults = frame.getHitTestResults(hitTestSource);
-
-      if (hitTestResults.length) {
-        const hit = hitTestResults[0];
-        const pose = hit.getPose(referenceSpace);
-
-        if (!pose) {
-          reticleObject.visible = false;
-          hasSmoothedReticlePosition = false;
-          dom.reticle.style.display = "none";
-          renderer.render(scene, camera);
-          return;
-        }
-
-        const hitMatrix = new THREE.Matrix4().fromArray(pose.transform.matrix);
-        const rawPosition = new THREE.Vector3().setFromMatrixPosition(hitMatrix);
-
-        if (
-          !hasSmoothedReticlePosition ||
-          smoothedReticlePosition.distanceToSquared(rawPosition) > 0.64
-        ) {
-          smoothedReticlePosition.copy(rawPosition);
-          hasSmoothedReticlePosition = true;
-        } else {
-          smoothedReticlePosition.lerp(rawPosition, 0.35);
-        }
-
-        hitMatrix.setPosition(smoothedReticlePosition);
-        reticleObject.visible = true;
-        reticleObject.matrix.copy(hitMatrix);
-        dom.reticle.style.display = "block";
-      } else {
-        reticleObject.visible = false;
-        hasSmoothedReticlePosition = false;
-        dom.reticle.style.display = "none";
+      updatePlacementCandidate(timestamp, frame, referenceSpace, hitTestResults);
+      if (pendingAnchorObject && placementStable) {
+        requestPendingPlacementAnchor(currentHitTestResult);
       }
     }
   }
