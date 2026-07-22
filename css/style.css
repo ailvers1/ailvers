@@ -1054,7 +1054,28 @@ body.photo-calibration-available #editPanel {
   filter: drop-shadow(0 1px 2px rgba(0, 0, 0, .9));
 }
 
+#calibrationDistanceLine {
+  display: none;
+  stroke: #38bdf8;
+  stroke-width: .32;
+  stroke-dasharray: 1 1.4;
+  vector-effect: non-scaling-stroke;
+  filter: drop-shadow(0 1px 2px rgba(0,0,0,.9));
+}
+
+#calibrationDistanceLine.show {
+  display: block;
+}
+
 #calibrationLayer.has-line #calibrationLine {
+  display: block;
+}
+
+body.ar-calibration-active #calibrationLine {
+  display: none;
+}
+
+body.ar-calibration-active #calibrationLayer.has-point-3 #calibrationLine {
   display: block;
 }
 
@@ -1074,8 +1095,69 @@ body.photo-calibration-available #editPanel {
 }
 
 #calibrationLayer.has-point-1 .calibrationHandle[data-point-index="0"],
-#calibrationLayer.has-point-2 .calibrationHandle[data-point-index="1"] {
+#calibrationLayer.has-point-2 .calibrationHandle[data-point-index="1"],
+#calibrationLayer.has-point-3 .calibrationHandle[data-point-index="2"] {
   display: block;
+}
+
+body.ar-calibration-active .calibrationHandle::after {
+  position: absolute;
+  left: 50%;
+  top: -23px;
+  padding: 3px 6px;
+  transform: translateX(-50%);
+  border-radius: 999px;
+  background: rgba(3,12,28,.88);
+  color: #fff;
+  font-size: 8px;
+  font-weight: 850;
+  white-space: nowrap;
+  pointer-events: none;
+}
+
+body.ar-calibration-active .calibrationHandle[data-point-index="0"]::after { content: "내 위치"; }
+body.ar-calibration-active .calibrationHandle[data-point-index="1"]::after { content: "설치할 곳"; }
+body.ar-calibration-active .calibrationHandle[data-point-index="2"]::after { content: "천장점"; }
+
+body.ar-calibration-active .calibrationHandle[data-point-index="0"] {
+  border-color: #7dd3fc;
+  background: #0284c7;
+  pointer-events: none;
+}
+
+body.ar-calibration-active .calibrationHandle[data-point-index="1"] {
+  border-color: #86efac;
+  background: #16a34a;
+  pointer-events: none;
+}
+
+.arCalibrationSteps {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 5px;
+  margin: 11px 0 10px;
+}
+
+.arCalibrationSteps span {
+  padding: 6px 4px;
+  border: 1px solid rgba(255,255,255,.08);
+  border-radius: 9px;
+  background: rgba(255,255,255,.045);
+  color: #71849c;
+  font-size: 8px;
+  font-weight: 850;
+  text-align: center;
+}
+
+.arCalibrationSteps span.active {
+  border-color: rgba(56,189,248,.42);
+  background: rgba(14,165,233,.17);
+  color: #e0f2fe;
+}
+
+.arCalibrationSteps span.done {
+  border-color: rgba(74,222,128,.28);
+  color: #bbf7d0;
 }
 
 #calibrationPanel {
