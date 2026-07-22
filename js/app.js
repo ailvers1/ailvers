@@ -42,6 +42,7 @@ const dom = {
   toast: $("toast"),
   captureHint: $("captureHint"),
   captureHintBtn: $("captureHintBtn"),
+  captureModeHint: $("captureModeHint"),
   captureStrip: $("captureStrip"),
   loadingOverlay: $("loadingOverlay"),
   loadingText: $("loadingText"),
@@ -160,6 +161,9 @@ const AR_FLOOR_DISTANCE_CORRECTION = 1.2 / 1.8;
 const PLACEMENT_NEAR_DISTANCE = 1;
 const PLACEMENT_FAR_DISTANCE = 4;
 let captureHintTimer = null;
+let captureModeHintTimer = null;
+let captureUiHidden = false;
+let captureUiArmedAt = 0;
 const AI_KIOSK_TEXTURES = {
   screenMeshNames: new Set([
     "Object_5",
@@ -339,6 +343,7 @@ function bindEvents() {
   safeClick("placementResetBtn", resetSelectedPlacement);
   safeClick("uiFoldBtn", toggleUiFold);
   safeClick("captureHintBtn", captureScreen);
+  window.addEventListener("pointerdown", restoreCaptureUiOnPointer, true);
 
   safeClick("clearBtn", clearAll);
 
@@ -1202,6 +1207,7 @@ async function startAR() {
     dom.startScreen.classList.add("hidden");
     dom.topBar.classList.add("show");
     dom.reticle.style.display = "none";
+    if (dom.savePhotoBtn) dom.savePhotoBtn.textContent = "UI 숨기기";
 
     showToast(`AR 시작됨. 바닥을 비춰주세요. (${arReferenceSpaceType})`);
 
@@ -1214,6 +1220,7 @@ async function startAR() {
       resetPlacementTracking("searching");
       dom.reticle.style.display = "none";
       dom.arPlacementGuide?.classList.remove("show");
+      exitCaptureUiMode(false);
       if (dom.placeBtn) {
         dom.placeBtn.disabled = false;
         dom.placeBtn.textContent = "📍 배치";
@@ -1284,6 +1291,7 @@ async function startPreview(message) {
 
   dom.startScreen.classList.add("hidden");
   dom.topBar.classList.add("show");
+  if (dom.savePhotoBtn) dom.savePhotoBtn.textContent = "이미지 저장";
   dom.reticle.style.display = "none";
   dom.arPlacementGuide?.classList.remove("show");
   if (dom.placeBtn) {
@@ -2701,7 +2709,7 @@ function updateHistoryButtons() {
 
 async function captureScreen() {
   if (isArSessionActive()) {
-    showPhoneScreenshotGuide();
+    enterCaptureUiMode();
     return;
   }
 
@@ -2749,6 +2757,42 @@ async function captureScreen() {
 
 function isArSessionActive() {
   return Boolean(renderer?.xr?.isPresenting && !previewMode);
+}
+
+function enterCaptureUiMode() {
+  if (!isArSessionActive() || captureUiHidden) return;
+
+  captureUiHidden = true;
+  captureUiArmedAt = performance.now() + 350;
+  hideCapturePrompt();
+  document.body.classList.add("capture-ui-hidden");
+  dom.captureModeHint?.classList.remove("is-clear");
+
+  clearTimeout(captureModeHintTimer);
+  captureModeHintTimer = setTimeout(() => {
+    dom.captureModeHint?.classList.add("is-clear");
+  }, 1900);
+}
+
+function restoreCaptureUiOnPointer(event) {
+  if (!captureUiHidden || performance.now() < captureUiArmedAt) return;
+
+  event.preventDefault();
+  event.stopImmediatePropagation();
+  exitCaptureUiMode(true);
+}
+
+function exitCaptureUiMode(showMessage = false) {
+  if (!captureUiHidden && !document.body.classList.contains("capture-ui-hidden")) return;
+
+  captureUiHidden = false;
+  captureUiArmedAt = 0;
+  document.body.classList.remove("capture-ui-hidden");
+  dom.captureModeHint?.classList.add("is-clear");
+  clearTimeout(captureModeHintTimer);
+  captureModeHintTimer = null;
+
+  if (showMessage) showToast("조작 화면을 다시 표시했습니다.");
 }
 
 function showPhoneScreenshotGuide() {
