@@ -15,6 +15,7 @@ const dom = {
   arCalibrationIntro: $("arCalibrationIntro"),
   arCalibrationPanel: $("arCalibrationPanel"),
   arCalibrationStatus: $("arCalibrationStatus"),
+  arPhoneHeight: $("arPhoneHeight"),
   arCalibrationLength: $("arCalibrationLength"),
   arCalibrationApplyBtn: $("arCalibrationApplyBtn"),
   arCalibrationBadge: $("arCalibrationBadge"),
@@ -119,6 +120,7 @@ let pendingAnchorObject = null;
 let anchorRequestInFlight = false;
 const lastStablePlacementMatrix = new THREE.Matrix4();
 const lastViewerPosition = new THREE.Vector3();
+const lastRawPlacementPosition = new THREE.Vector3();
 let hasViewerPosition = false;
 let previewMode = false;
 let photoPreviewMode = false;
@@ -159,7 +161,9 @@ const calibration = {
   arViewerPosition: null,
   arInstallPosition: null,
   arInstallMatrix: null,
-  arInstallDistance: 0
+  arInstallDistance: 0,
+  arPhoneHeightMeters: 1.4,
+  arDistanceCorrection: 1.2 / 1.8
 };
 
 const gltfLoader = new GLTFLoader();
@@ -1029,18 +1033,21 @@ function updatePlacementCandidate(timestamp, frame, referenceSpace, hitTestResul
 
     if (normal.y < FLOOR_NORMAL_MIN || !floorLevelOk) continue;
 
+    const rawPosition = position.clone();
+    const distanceCorrection = getArDistanceCorrection();
+
     if (hasViewerPosition) {
       position.x = lastViewerPosition.x
-        + (position.x - lastViewerPosition.x) * AR_FLOOR_DISTANCE_CORRECTION;
+        + (position.x - lastViewerPosition.x) * distanceCorrection;
       position.z = lastViewerPosition.z
-        + (position.z - lastViewerPosition.z) * AR_FLOOR_DISTANCE_CORRECTION;
+        + (position.z - lastViewerPosition.z) * distanceCorrection;
       matrix.setPosition(position);
     }
 
     const distance = hasViewerPosition
       ? Math.hypot(position.x - lastViewerPosition.x, position.z - lastViewerPosition.z)
-      : position.length() * AR_FLOOR_DISTANCE_CORRECTION;
-    candidates.push({ result, matrix, position, distance });
+      : position.length() * distanceCorrection;
+    candidates.push({ result, matrix, position, rawPosition, distance });
   }
 
   if (!candidates.length) {
@@ -1057,6 +1064,7 @@ function updatePlacementCandidate(timestamp, frame, referenceSpace, hitTestResul
 
   candidates.sort((a, b) => a.distance - b.distance);
   const candidate = candidates[0];
+  lastRawPlacementPosition.copy(candidate.rawPosition);
   placementDistanceMeters = candidate.distance;
   currentHitTestResult = candidate.result;
 
@@ -1126,6 +1134,12 @@ function updatePlacementCandidate(timestamp, frame, referenceSpace, hitTestResul
     else state = "stable";
   }
   updatePlacementGuideUi(state);
+}
+
+function getArDistanceCorrection() {
+  return arCalibrationApplied && Number.isFinite(calibration.arDistanceCorrection)
+    ? calibration.arDistanceCorrection
+    : AR_FLOOR_DISTANCE_CORRECTION;
 }
 
 function queuePlacementAnchor(model) {
@@ -1260,6 +1274,8 @@ function startArCalibrationMode() {
   calibration.arInstallPosition = null;
   calibration.arInstallMatrix = null;
   calibration.arInstallDistance = 0;
+  calibration.arPhoneHeightMeters = Math.max(Number(dom.arPhoneHeight?.value) || 140, 50) / 100;
+  calibration.arDistanceCorrection = AR_FLOOR_DISTANCE_CORRECTION;
   dom.arCalibrationIntro?.classList.remove("show");
   dom.arCalibrationPanel?.classList.add("show");
   dom.arCalibrationBadge?.classList.remove("show");
@@ -1280,9 +1296,9 @@ function updateArCalibrationStatus() {
   });
   if (dom.arCalibrationStatus) {
     dom.arCalibrationStatus.textContent = count <= 1
-      ? "십자 표시를 설치할 바닥에 맞추고 화면을 누르세요."
+      ? "높이를 입력한 뒤 십자 표시를 설치할 바닥에 맞추고 화면을 누르세요."
       : count === 2
-        ? `내 위치 저장됨 · 설치 거리 ${calibration.arInstallDistance.toFixed(1)}m · 이제 천장점을 누르세요.`
+        ? `휴대폰 높이 반영 · 설치 거리 ${calibration.arInstallDistance.toFixed(1)}m · 이제 천장점을 누르세요.`
         : `세 점 지정 완료 · 높이 기준 ${Math.round(getArHeightPixelLength())}px`;
   }
   if (dom.arCalibrationApplyBtn) dom.arCalibrationApplyBtn.disabled = count < 3;
@@ -1295,13 +1311,40 @@ function onArCalibrationPoint(event) {
       return;
     }
 
+    const phoneHeightCm = Number(dom.arPhoneHeight?.value);
+    if (!Number.isFinite(phoneHeightCm) || phoneHeightCm < 50 || phoneHeightCm > 220) {
+      showToast("휴대폰 높이를 50~220cm 사이로 입력해 주세요.");
+      return;
+    }
+
+    calibration.arPhoneHeightMeters = phoneHeightCm / 100;
     calibration.arViewerPosition = lastViewerPosition.clone();
-    calibration.arInstallMatrix = lastStablePlacementMatrix.clone();
-    calibration.arInstallPosition = new THREE.Vector3().setFromMatrixPosition(lastStablePlacementMatrix);
-    calibration.arInstallDistance = Math.hypot(
-      calibration.arInstallPosition.x - calibration.arViewerPosition.x,
-      calibration.arInstallPosition.z - calibration.arViewerPosition.z
+
+    const rawHorizontalDistance = Math.max(Math.hypot(
+      lastRawPlacementPosition.x - lastViewerPosition.x,
+      lastRawPlacementPosition.z - lastViewerPosition.z
+    ), 0.1);
+    const viewDirection = new THREE.Vector3();
+    renderer.xr.getCamera(camera).getWorldDirection(viewDirection);
+    const horizontalLook = Math.hypot(viewDirection.x, viewDirection.z);
+    const downwardLook = Math.max(-viewDirection.y, 0);
+    const heightBasedDistance = downwardLook > 0.06
+      ? calibration.arPhoneHeightMeters * horizontalLook / downwardLook
+      : rawHorizontalDistance * AR_FLOOR_DISTANCE_CORRECTION;
+
+    calibration.arDistanceCorrection = THREE.MathUtils.clamp(
+      heightBasedDistance / rawHorizontalDistance,
+      0.45,
+      1.45
     );
+    calibration.arInstallDistance = rawHorizontalDistance * calibration.arDistanceCorrection;
+    calibration.arInstallPosition = lastRawPlacementPosition.clone();
+    calibration.arInstallPosition.x = lastViewerPosition.x
+      + (lastRawPlacementPosition.x - lastViewerPosition.x) * calibration.arDistanceCorrection;
+    calibration.arInstallPosition.z = lastViewerPosition.z
+      + (lastRawPlacementPosition.z - lastViewerPosition.z) * calibration.arDistanceCorrection;
+    calibration.arInstallMatrix = lastStablePlacementMatrix.clone();
+    calibration.arInstallMatrix.setPosition(calibration.arInstallPosition);
     calibration.points.push({ x: 0.5, y: 0.5 });
     renderCalibrationOverlay();
     updateArCalibrationStatus();
@@ -1340,7 +1383,7 @@ function applyArCalibration() {
   const referenceCm = Number(dom.arCalibrationLength?.value);
 
   if (calibration.points.length < 3 || !calibration.arInstallPosition || pixelLength < 80) {
-    showToast("내 위치, 설치할 곳, 천장점을 모두 지정해 주세요.");
+    showToast("휴대폰 높이, 설치할 곳, 천장점을 모두 지정해 주세요.");
     return;
   }
   if (!Number.isFinite(referenceCm) || referenceCm <= 0) {
