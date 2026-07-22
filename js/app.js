@@ -44,6 +44,10 @@ const dom = {
   editDoneBtn: $("editDoneBtn"),
   editStepBtn: $("editStepBtn"),
   placementResetBtn: $("placementResetBtn"),
+  screenMediaInput: $("screenMediaInput"),
+  screenMediaStatus: $("screenMediaStatus"),
+  screenMediaChooseBtn: $("screenMediaChooseBtn"),
+  screenMediaRemoveBtn: $("screenMediaRemoveBtn"),
   editControls: $("editControls"),
   toast: $("toast"),
   captureHint: $("captureHint"),
@@ -349,6 +353,8 @@ function bindEvents() {
   safeClick("editDoneBtn", completeEdit);
   safeClick("editStepBtn", toggleEditMoveStep);
   safeClick("placementResetBtn", resetSelectedPlacement);
+  safeClick("screenMediaChooseBtn", requestScreenMedia);
+  safeClick("screenMediaRemoveBtn", removeSelectedScreenMedia);
   safeClick("uiFoldBtn", toggleUiFold);
   safeClick("captureHintBtn", captureScreen);
   window.addEventListener("pointerdown", restoreCaptureUiOnPointer, true);
@@ -437,6 +443,7 @@ function bindEvents() {
   window.addEventListener("pointercancel", endObjectControlGesture);
 
   dom.photoInput?.addEventListener("change", handlePhotoPreviewFile);
+  dom.screenMediaInput?.addEventListener("change", handleScreenMediaFile);
   bindCalibrationEvents();
 }
 
@@ -2001,7 +2008,7 @@ function updateDynamicTextures(timestamp = 0) {
 
   for (const obj of placedObjects) {
     obj.traverse((child) => {
-      if (!child.isMesh || !child.userData.screenTextures?.length || !child.material) return;
+      if (!child.isMesh || child.userData.customScreenMedia || !child.userData.screenTextures?.length || !child.material) return;
 
       const textureIndex = Math.floor(timestamp / TEXTURE_SWAP_MS) % child.userData.screenTextures.length;
       const nextTexture = child.userData.screenTextures[textureIndex];
@@ -2016,6 +2023,223 @@ function updateDynamicTextures(timestamp = 0) {
   }
 }
 
+function requestScreenMedia() {
+  if (!selectedObject) {
+    showToast("화면을 바꿀 제품을 먼저 선택하세요.");
+    return;
+  }
+
+  if (!findScreenMeshes(selectedObject).length) {
+    showToast("이 제품에서 화면 영역을 찾지 못했습니다.");
+    return;
+  }
+
+  dom.screenMediaInput.value = "";
+  dom.screenMediaInput.click();
+}
+
+async function handleScreenMediaFile(event) {
+  const file = event.target.files?.[0];
+  const target = selectedObject;
+  if (!file || !target) return;
+
+  if (!file.type.startsWith("image/") && !file.type.startsWith("video/")) {
+    showToast("이미지 또는 영상 파일을 선택해 주세요.");
+    return;
+  }
+
+  if (file.size > 150 * 1024 * 1024) {
+    showToast("150MB 이하의 파일을 선택해 주세요.");
+    return;
+  }
+
+  try {
+    setScreenMediaBusy(true, "콘텐츠 준비 중...");
+    const media = await createScreenMedia(file);
+
+    if (!placedObjects.includes(target)) {
+      disposeScreenMediaResource(media);
+      return;
+    }
+
+    const appliedCount = applyScreenMediaToObject(target, media);
+    if (!appliedCount) {
+      disposeScreenMediaResource(media);
+      showToast("제품의 화면 영역을 찾지 못했습니다.");
+      return;
+    }
+
+    updateScreenMediaUi();
+    showToast(`${file.type.startsWith("video/") ? "영상" : "이미지"}을 제품 화면에 적용했습니다.`);
+  } catch (err) {
+    console.error("Screen media apply failed:", err);
+    showToast("화면 콘텐츠를 불러오지 못했습니다.");
+  } finally {
+    setScreenMediaBusy(false);
+  }
+}
+
+function createScreenMedia(file) {
+  const url = URL.createObjectURL(file);
+
+  if (file.type.startsWith("video/")) {
+    return new Promise((resolve, reject) => {
+      const video = document.createElement("video");
+      video.src = url;
+      video.muted = true;
+      video.loop = true;
+      video.autoplay = true;
+      video.playsInline = true;
+      video.preload = "auto";
+
+      const fail = () => {
+        URL.revokeObjectURL(url);
+        reject(new Error("Video load failed"));
+      };
+
+      video.addEventListener("error", fail, { once: true });
+      video.addEventListener("loadeddata", () => {
+        const texture = new THREE.VideoTexture(video);
+        prepareCustomScreenTexture(texture);
+        video.play().catch(() => {});
+        resolve({ texture, url, video, name: file.name, type: "video" });
+      }, { once: true });
+      video.load();
+    });
+  }
+
+  return new Promise((resolve, reject) => {
+    const image = new Image();
+    image.onload = () => {
+      const texture = new THREE.Texture(image);
+      prepareCustomScreenTexture(texture);
+      texture.needsUpdate = true;
+      resolve({ texture, url, image, name: file.name, type: "image" });
+    };
+    image.onerror = () => {
+      URL.revokeObjectURL(url);
+      reject(new Error("Image load failed"));
+    };
+    image.src = url;
+  });
+}
+
+function prepareCustomScreenTexture(texture) {
+  texture.colorSpace = THREE.SRGBColorSpace;
+  texture.flipY = false;
+  texture.wrapS = THREE.ClampToEdgeWrapping;
+  texture.wrapT = THREE.ClampToEdgeWrapping;
+  texture.minFilter = THREE.LinearFilter;
+  texture.magFilter = THREE.LinearFilter;
+  texture.generateMipmaps = false;
+}
+
+function findScreenMeshes(root) {
+  const meshes = [];
+  const productId = root?.userData?.productId;
+  const screenNamePattern = /(screen|display|monitor|lcd|led|panel|signage|화면)/i;
+
+  root?.traverse((child) => {
+    if (!child.isMesh) return;
+
+    const names = [child.name, child.geometry?.name, child.material?.name].filter(Boolean);
+    const explicitAiScreen = productId === "ai_kiosk_white"
+      && names.some((name) => AI_KIOSK_TEXTURES.screenMeshNames.has(name));
+    const explicitPhotoScreen = productId === "photo_kiosk_black"
+      && names.some((name) => PHOTO_KIOSK_TEXTURES.screenMeshNames.has(name));
+    const knownScreen = Boolean(child.userData.screenTextures?.length);
+    const namedScreen = names.some((name) => screenNamePattern.test(name));
+
+    if (explicitAiScreen || explicitPhotoScreen || knownScreen || namedScreen) meshes.push(child);
+  });
+
+  return [...new Set(meshes)];
+}
+
+function applyScreenMediaToObject(object, media) {
+  const screens = findScreenMeshes(object);
+  if (!screens.length) return 0;
+
+  disposeObjectScreenMedia(object, true);
+
+  for (const mesh of screens) {
+    if (!mesh.userData.defaultScreenMaterial) {
+      mesh.userData.defaultScreenMaterial = mesh.material;
+      mesh.userData.defaultScreenTextures = mesh.userData.screenTextures || null;
+      mesh.userData.defaultTextureSwapMs = mesh.userData.textureSwapMs || null;
+    }
+
+    mesh.material = new THREE.MeshBasicMaterial({
+      map: media.texture,
+      toneMapped: false,
+      side: THREE.DoubleSide,
+      transparent: true,
+      opacity: 1,
+      depthTest: true,
+      depthWrite: false
+    });
+    mesh.userData.screenTextures = [media.texture];
+    mesh.userData.customScreenMedia = true;
+  }
+
+  object.userData.screenMedia = media;
+  return screens.length;
+}
+
+function removeSelectedScreenMedia() {
+  if (!selectedObject?.userData?.screenMedia) return;
+  disposeObjectScreenMedia(selectedObject);
+  updateScreenMediaUi();
+  showToast("제품 화면을 기본 콘텐츠로 되돌렸습니다.");
+}
+
+function disposeObjectScreenMedia(object, keepUi = false) {
+  const media = object?.userData?.screenMedia;
+  if (!object || !media) return;
+
+  object.traverse((child) => {
+    if (!child.isMesh || !child.userData.customScreenMedia) return;
+    child.material?.dispose?.();
+    child.material = child.userData.defaultScreenMaterial || child.material;
+    child.userData.screenTextures = child.userData.defaultScreenTextures || [];
+    child.userData.textureSwapMs = child.userData.defaultTextureSwapMs || TEXTURE_SWAP_MS;
+    delete child.userData.customScreenMedia;
+  });
+
+  disposeScreenMediaResource(media);
+  delete object.userData.screenMedia;
+  if (!keepUi) updateScreenMediaUi();
+}
+
+function disposeScreenMediaResource(media) {
+  if (!media) return;
+  media.video?.pause?.();
+  if (media.video) media.video.removeAttribute("src");
+  media.texture?.dispose?.();
+  if (media.url) URL.revokeObjectURL(media.url);
+}
+
+function setScreenMediaBusy(busy, message = "") {
+  if (dom.screenMediaChooseBtn) dom.screenMediaChooseBtn.disabled = busy;
+  if (busy && dom.screenMediaStatus) dom.screenMediaStatus.textContent = message;
+}
+
+function updateScreenMediaUi() {
+  if (!dom.screenMediaStatus || !dom.screenMediaRemoveBtn || !dom.screenMediaChooseBtn) return;
+
+  const media = selectedObject?.userData?.screenMedia;
+  const screenCount = selectedObject ? findScreenMeshes(selectedObject).length : 0;
+  dom.screenMediaChooseBtn.disabled = !selectedObject || !screenCount;
+  dom.screenMediaRemoveBtn.disabled = !media;
+  dom.screenMediaStatus.textContent = media
+    ? `${media.type === "video" ? "영상" : "이미지"} · ${media.name}`
+    : screenCount
+      ? "이미지나 영상을 넣어보세요"
+      : selectedObject
+        ? "화면 영역을 찾지 못했어요"
+        : "제품을 선택하면 사용할 수 있어요";
+}
+
 
 function selectObject(obj) {
   selectedObject = obj;
@@ -2028,6 +2252,7 @@ function selectObject(obj) {
     updatePlacementGuideUi(placementStable ? "stable" : "unstable");
     hideObjectControlsOverlay();
     refreshCalibrationReadout();
+    updateScreenMediaUi();
     return;
   }
 
@@ -2044,6 +2269,7 @@ function selectObject(obj) {
   updateDimensionOverlay();
   refreshCalibrationReadout();
   updateObjectControlsOverlay();
+  updateScreenMediaUi();
 }
 
 function onPhotoPreviewPointerDown(event) {
@@ -2749,12 +2975,14 @@ function clearPlacedObjects() {
   if (dom.editTitle) dom.editTitle.textContent = "선택된 제품 없음";
 
   for (const obj of placedObjects) {
+    disposeObjectScreenMedia(obj, true);
     releaseObjectAnchor(obj);
     scene.remove(obj);
   }
 
   placedObjects = [];
   pendingAnchorObject = null;
+  updateScreenMediaUi();
 }
 
 function snapshotScene() {
