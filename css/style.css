@@ -34,6 +34,10 @@ canvas {
   display: none;
 }
 
+#screenMediaInput {
+  display: none;
+}
+
 #photoPreviewHint {
   position: fixed;
   left: 12px;
@@ -614,6 +618,90 @@ button:disabled {
   justify-content: space-between;
   gap: 14px;
   user-select: none;
+}
+
+#screenMediaBar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  min-height: 37px;
+  padding: 6px 7px;
+  border: 1px solid rgba(125,211,252,.13);
+  border-radius: 13px;
+  background: linear-gradient(135deg, rgba(14,165,233,.11), rgba(255,255,255,.035));
+  box-sizing: border-box;
+}
+
+.screenMediaInfo,
+.screenMediaActions {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  min-width: 0;
+}
+
+.screenMediaIcon {
+  display: grid;
+  width: 25px;
+  height: 25px;
+  flex: 0 0 auto;
+  place-items: center;
+  border-radius: 8px;
+  background: linear-gradient(145deg, rgba(56,189,248,.28), rgba(14,165,233,.1));
+  color: #bae6fd;
+  font-size: 8px;
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.11);
+}
+
+.screenMediaInfo strong,
+.screenMediaInfo small {
+  display: block;
+  max-width: 128px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.screenMediaInfo strong {
+  color: #f8fafc;
+  font-size: 9px;
+}
+
+.screenMediaInfo small {
+  margin-top: 2px;
+  color: #8fa4bd;
+  font-size: 7px;
+}
+
+.screenMediaActions {
+  gap: 4px;
+}
+
+#screenMediaChooseBtn,
+#screenMediaRemoveBtn {
+  min-height: 27px;
+  border: 1px solid rgba(125,211,252,.2);
+  border-radius: 9px;
+  background: rgba(56,189,248,.12);
+  color: #dff6ff;
+  font-size: 8px;
+  font-weight: 850;
+}
+
+#screenMediaChooseBtn {
+  padding: 5px 8px;
+}
+
+#screenMediaRemoveBtn {
+  width: 27px;
+  padding: 0;
+  font-size: 15px;
+}
+
+#screenMediaChooseBtn:disabled,
+#screenMediaRemoveBtn:disabled {
+  opacity: .35;
 }
 
 .editEyebrow {
@@ -1391,7 +1479,7 @@ body.ui-clean #calibrationLayer {
 /* Refined AR control dock: compact hierarchy, quiet glass, clear tap targets. */
 #editPanel {
   width: min(336px, calc(100vw - 20px));
-  max-height: min(278px, calc(100dvh - 20px));
+  max-height: min(326px, calc(100dvh - 20px));
   bottom: calc(env(safe-area-inset-bottom, 0px) + 10px);
   gap: 9px;
   padding: 11px;
@@ -1883,7 +1971,7 @@ body.ui-clean #calibrationLayer {
 /* Keep the refined dock above legacy compact overrides. */
 #editPanel {
   width: min(336px, calc(100vw - 20px));
-  max-height: min(278px, calc(100dvh - 20px));
+  max-height: min(326px, calc(100dvh - 20px));
   bottom: calc(env(safe-area-inset-bottom, 0px) + 10px);
   gap: 9px;
   padding: 11px;
