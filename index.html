@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, user-scalable=no" />
   <title>SYSMATE AR 제품 배치</title>
-  <link rel="stylesheet" href="css/style.css?v=20260722-ar-panel3" />
+  <link rel="stylesheet" href="css/style.css?v=20260722-ar-placement1" />
 </head>
 <body>
   <div id="photoPreviewBg"></div>
@@ -151,6 +151,7 @@
       <div>
         <div class="editEyebrow">AR 제품 조작</div>
         <div id="editTitle">선택된 제품 없음</div>
+        <div id="editDistance">현재 거리 -</div>
       </div>
       <button id="editDoneBtn" type="button">완료</button>
     </div>
@@ -158,7 +159,10 @@
     <div id="editControls">
       <div class="editSectionHeader">
         <span>위치 이동</span>
-        <button id="editStepBtn" type="button">이동 단위 5cm</button>
+        <div class="editSectionActions">
+          <button id="editStepBtn" type="button">이동 단위 5cm</button>
+          <button id="placementResetBtn" type="button">처음 위치</button>
+        </div>
       </div>
 
       <div class="pad">
@@ -206,6 +210,18 @@
   </div>
 
   <div id="reticle"></div>
+  <div id="arPlacementGuide" aria-live="polite">
+    <div class="placementStatusLine">
+      <span id="placementStatusDot"></span>
+      <strong id="placementStatusText">바닥을 찾는 중</strong>
+    </div>
+    <div class="placementMetrics">
+      <span id="placementDistance">설치 거리 -</span>
+      <span id="placementProductSize">제품 높이 -</span>
+    </div>
+    <div id="placementStability"><i></i></div>
+    <small id="placementHelp">휴대폰을 천천히 움직여 바닥을 인식해 주세요.</small>
+  </div>
   <div id="toast"></div>
   <div id="captureHint">
     <span>캡처: 휴대폰 전원 버튼 + 볼륨 아래 버튼</span>
@@ -227,6 +243,6 @@
   }
   </script>
 
-  <script type="module" src="js/app.js?v=20260714-ar-panel1"></script>
+  <script type="module" src="js/app.js?v=20260722-ar-placement1"></script>
 </body>
 </html>
