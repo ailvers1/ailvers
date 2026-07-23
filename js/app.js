@@ -80,6 +80,7 @@ const dom = {
   objectToolbar: $("objectToolbar"),
   objectRotateHandle: $("objectRotateHandle"),
   objectTiltHandle: $("objectTiltHandle"),
+  objectViewPresets: $("objectViewPresets"),
   objectTransformReadout: $("objectTransformReadout"),
   objectResetBtn: $("objectResetBtn"),
   objectScaleHandle: $("objectScaleHandle"),
@@ -450,6 +451,9 @@ function bindEvents() {
   dom.objectTiltHandle?.addEventListener("pointerdown", (event) => startObjectControlGesture(event, "tilt"));
   dom.objectScaleHandle?.addEventListener("pointerdown", (event) => startObjectControlGesture(event, "scale"));
   safeClick("objectResetBtn", resetSelectedObjectTransform);
+  dom.objectViewPresets?.querySelectorAll("[data-view-angle]").forEach((button) => {
+    button.addEventListener("click", () => applyPhotoViewPreset(Number(button.dataset.viewAngle)));
+  });
   window.addEventListener("pointermove", onObjectControlPointerMove);
   window.addEventListener("pointerup", endObjectControlGesture);
   window.addEventListener("pointercancel", endObjectControlGesture);
@@ -2681,6 +2685,20 @@ function resetSelectedObjectTransform() {
   showToast("제품 각도와 크기를 초기화했습니다.");
 }
 
+function applyPhotoViewPreset(angleDegrees) {
+  if (!photoPreviewMode || !selectedObject || !Number.isFinite(angleDegrees)) return;
+  const before = snapshotScene();
+  selectedObject.rotation.x = THREE.MathUtils.degToRad(
+    THREE.MathUtils.clamp(angleDegrees, -60, 60)
+  );
+  updateDimensionOverlay();
+  updateObjectControlsOverlay();
+  recordHistory(before);
+
+  const label = angleDegrees < 0 ? "위에서 본 시점" : angleDegrees > 0 ? "아래에서 본 시점" : "정면 시점";
+  showToast(`${label}으로 맞췄습니다. 시점 조절을 드래그해 미세 조정할 수 있어요.`);
+}
+
 function updateObjectControlsOverlay() {
   if (!dom.objectControlsOverlay || !photoPreviewMode || !selectedObject || !camera) {
     hideObjectControlsOverlay();
@@ -2747,7 +2765,14 @@ function updateObjectControlsOverlay() {
   if (dom.objectTransformReadout) {
     const scalePercent = Math.round(getUserScale(selectedObject) * 100);
     const tiltDegrees = Math.round(THREE.MathUtils.radToDeg(selectedObject.rotation.x));
-    dom.objectTransformReadout.textContent = `${scalePercent}% · 상하 ${tiltDegrees}°`;
+    const viewLabel = tiltDegrees < -2 ? `위 ${Math.abs(tiltDegrees)}°` : tiltDegrees > 2 ? `아래 ${tiltDegrees}°` : "정면";
+    dom.objectTransformReadout.textContent = `${scalePercent}% · ${viewLabel}`;
+  }
+  if (dom.objectViewPresets) {
+    const tiltDegrees = Math.round(THREE.MathUtils.radToDeg(selectedObject.rotation.x));
+    dom.objectViewPresets.querySelectorAll("[data-view-angle]").forEach((button) => {
+      button.classList.toggle("active", Math.abs(Number(button.dataset.viewAngle) - tiltDegrees) <= 2);
+    });
   }
 }
 
