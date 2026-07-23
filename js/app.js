@@ -80,7 +80,7 @@ const dom = {
   objectToolbar: $("objectToolbar"),
   objectRotateHandle: $("objectRotateHandle"),
   objectTiltHandle: $("objectTiltHandle"),
-  objectViewPresets: $("objectViewPresets"),
+  objectRollHandle: $("objectRollHandle"),
   objectTransformReadout: $("objectTransformReadout"),
   objectResetBtn: $("objectResetBtn"),
   objectScaleHandle: $("objectScaleHandle"),
@@ -449,11 +449,9 @@ function bindEvents() {
 
   dom.objectRotateHandle?.addEventListener("pointerdown", (event) => startObjectControlGesture(event, "rotate"));
   dom.objectTiltHandle?.addEventListener("pointerdown", (event) => startObjectControlGesture(event, "tilt"));
+  dom.objectRollHandle?.addEventListener("pointerdown", (event) => startObjectControlGesture(event, "roll"));
   dom.objectScaleHandle?.addEventListener("pointerdown", (event) => startObjectControlGesture(event, "scale"));
   safeClick("objectResetBtn", resetSelectedObjectTransform);
-  dom.objectViewPresets?.querySelectorAll("[data-view-angle]").forEach((button) => {
-    button.addEventListener("click", () => applyPhotoViewPreset(Number(button.dataset.viewAngle)));
-  });
   window.addEventListener("pointermove", onObjectControlPointerMove);
   window.addEventListener("pointerup", endObjectControlGesture);
   window.addEventListener("pointercancel", endObjectControlGesture);
@@ -2625,6 +2623,7 @@ function startObjectControlGesture(event, type) {
     startScale: getUserScale(selectedObject),
     startRotationX: selectedObject.rotation.x,
     startRotationY: selectedObject.rotation.y,
+    startRotationZ: selectedObject.rotation.z,
     before: snapshotScene()
   };
   try {
@@ -2648,6 +2647,13 @@ function onObjectControlPointerMove(event) {
       objectControlGesture.startRotationX - dy * 0.01,
       -tiltLimit,
       tiltLimit
+    );
+  } else if (objectControlGesture.type === "roll") {
+    const rollLimit = THREE.MathUtils.degToRad(45);
+    selectedObject.rotation.z = THREE.MathUtils.clamp(
+      objectControlGesture.startRotationZ + dx * 0.01,
+      -rollLimit,
+      rollLimit
     );
   } else if (objectControlGesture.type === "scale") {
     applyInteractiveScale(objectControlGesture.startScale * Math.exp((dx - dy) * 0.005));
@@ -2683,20 +2689,6 @@ function resetSelectedObjectTransform() {
   updateObjectControlsOverlay();
   recordHistory(before);
   showToast("제품 각도와 크기를 초기화했습니다.");
-}
-
-function applyPhotoViewPreset(angleDegrees) {
-  if (!photoPreviewMode || !selectedObject || !Number.isFinite(angleDegrees)) return;
-  const before = snapshotScene();
-  selectedObject.rotation.x = THREE.MathUtils.degToRad(
-    THREE.MathUtils.clamp(angleDegrees, -60, 60)
-  );
-  updateDimensionOverlay();
-  updateObjectControlsOverlay();
-  recordHistory(before);
-
-  const label = angleDegrees < 0 ? "위에서 본 시점" : angleDegrees > 0 ? "아래에서 본 시점" : "정면 시점";
-  showToast(`${label}으로 맞췄습니다. 시점 조절을 드래그해 미세 조정할 수 있어요.`);
 }
 
 function updateObjectControlsOverlay() {
@@ -2764,15 +2756,10 @@ function updateObjectControlsOverlay() {
   }
   if (dom.objectTransformReadout) {
     const scalePercent = Math.round(getUserScale(selectedObject) * 100);
-    const tiltDegrees = Math.round(THREE.MathUtils.radToDeg(selectedObject.rotation.x));
-    const viewLabel = tiltDegrees < -2 ? `위 ${Math.abs(tiltDegrees)}°` : tiltDegrees > 2 ? `아래 ${tiltDegrees}°` : "정면";
-    dom.objectTransformReadout.textContent = `${scalePercent}% · ${viewLabel}`;
-  }
-  if (dom.objectViewPresets) {
-    const tiltDegrees = Math.round(THREE.MathUtils.radToDeg(selectedObject.rotation.x));
-    dom.objectViewPresets.querySelectorAll("[data-view-angle]").forEach((button) => {
-      button.classList.toggle("active", Math.abs(Number(button.dataset.viewAngle) - tiltDegrees) <= 2);
-    });
+    const x = Math.round(THREE.MathUtils.radToDeg(selectedObject.rotation.x));
+    const y = Math.round(THREE.MathUtils.radToDeg(selectedObject.rotation.y));
+    const z = Math.round(THREE.MathUtils.radToDeg(selectedObject.rotation.z));
+    dom.objectTransformReadout.textContent = `${scalePercent}% · X ${x}° · Y ${y}° · Z ${z}°`;
   }
 }
 
