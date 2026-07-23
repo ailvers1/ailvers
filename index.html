@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, user-scalable=no" />
   <title>SYSMATE AR 제품 배치</title>
-  <link rel="stylesheet" href="css/style.css?v=20260722-photo-view1" />
+  <link rel="stylesheet" href="css/style.css?v=20260723-product-angle1" />
 </head>
 <body>
   <div id="photoPreviewBg"></div>
@@ -254,16 +254,13 @@
     <div id="objectSelectionBox"></div>
     <div id="objectToolbar" role="toolbar" aria-label="선택 제품 조작">
       <div class="objectToolbarMain">
-        <button id="objectRotateHandle" type="button" aria-label="좌우 회전">↔ 회전</button>
-        <button id="objectTiltHandle" type="button" aria-label="상하 시점 미세 조절">↕ 시점 조절</button>
-        <span id="objectTransformReadout">100% · 정면</span>
-        <button id="objectResetBtn" type="button">초기화</button>
+        <button id="objectRotateHandle" type="button" aria-label="제품 좌우 방향 조절">↔ 방향</button>
+        <button id="objectTiltHandle" type="button" aria-label="제품 앞뒤 기울기 조절">↕ 앞뒤</button>
+        <button id="objectRollHandle" type="button" aria-label="제품 좌우 기울기 조절">⟳ 좌우 기울기</button>
       </div>
-      <div id="objectViewPresets" class="objectViewPresets" aria-label="촬영 시점 빠른 선택">
-        <span>촬영 시점</span>
-        <button type="button" data-view-angle="-15">위에서</button>
-        <button type="button" data-view-angle="0" class="active">정면</button>
-        <button type="button" data-view-angle="15">아래에서</button>
+      <div class="objectAngleReadoutRow">
+        <span id="objectTransformReadout">100% · X 0° · Y 0° · Z 0°</span>
+        <button id="objectResetBtn" type="button">초기화</button>
       </div>
     </div>
     <button id="objectScaleHandle" type="button" aria-label="제품 크기 조절">↘</button>
@@ -306,6 +303,6 @@
   }
   </script>
 
-  <script type="module" src="js/app.js?v=20260722-photo-view1"></script>
+  <script type="module" src="js/app.js?v=20260723-product-angle1"></script>
 </body>
 </html>
