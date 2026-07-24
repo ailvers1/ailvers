@@ -234,17 +234,6 @@ body.capture-ui-hidden #captureModeHint:not(.is-clear) {
   font-weight: 800;
 }
 
-#arCalibrationLength {
-  width: 100%;
-  min-width: 0;
-  padding: 8px 9px;
-  border: 1px solid rgba(255,255,255,.22);
-  border-radius: 9px;
-  background: rgba(255,255,255,.1);
-  color: #fff;
-  box-sizing: border-box;
-}
-
 .arCalibrationTextButton {
   width: 100%;
   min-height: 30px;
@@ -1098,7 +1087,7 @@ body.ar-calibration-active #calibrationLine {
   display: none;
 }
 
-body.ar-calibration-active #calibrationLayer.has-point-3 #calibrationLine {
+body.ar-calibration-active #calibrationLayer.has-point-2 #calibrationLine {
   display: block;
 }
 
@@ -1118,8 +1107,7 @@ body.ar-calibration-active #calibrationLayer.has-point-3 #calibrationLine {
 }
 
 #calibrationLayer.has-point-1 .calibrationHandle[data-point-index="0"],
-#calibrationLayer.has-point-2 .calibrationHandle[data-point-index="1"],
-#calibrationLayer.has-point-3 .calibrationHandle[data-point-index="2"] {
+#calibrationLayer.has-point-2 .calibrationHandle[data-point-index="1"] {
   display: block;
 }
 
@@ -1138,9 +1126,8 @@ body.ar-calibration-active .calibrationHandle::after {
   pointer-events: none;
 }
 
-body.ar-calibration-active .calibrationHandle[data-point-index="0"]::after { content: "휴대폰"; }
-body.ar-calibration-active .calibrationHandle[data-point-index="1"]::after { content: "설치할 곳"; }
-body.ar-calibration-active .calibrationHandle[data-point-index="2"]::after { content: "천장점"; }
+body.ar-calibration-active .calibrationHandle[data-point-index="0"]::after { content: "내 위치"; }
+body.ar-calibration-active .calibrationHandle[data-point-index="1"]::after { content: "설치 지점"; }
 
 body.ar-calibration-active .calibrationHandle[data-point-index="0"] {
   border-color: #7dd3fc;
@@ -1156,7 +1143,7 @@ body.ar-calibration-active .calibrationHandle[data-point-index="1"] {
 
 .arCalibrationSteps {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
+  grid-template-columns: repeat(2, 1fr);
   gap: 5px;
   margin: 11px 0 10px;
 }
