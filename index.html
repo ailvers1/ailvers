@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, user-scalable=no" />
   <title>SYSMATE AR 제품 배치</title>
-  <link rel="stylesheet" href="css/style.css?v=20260723-product-angle1" />
+  <link rel="stylesheet" href="css/style.css?v=20260724-two-point-distance1" />
 </head>
 <body>
   <div id="photoPreviewBg"></div>
@@ -51,43 +51,37 @@
   <!-- AR 실제 크기 맞추기: 한 AR 세션 안에서 선택적으로 진행 -->
   <section id="arCalibrationIntro" class="arCalibrationCard" role="dialog" aria-modal="true" aria-labelledby="arCalibrationIntroTitle">
     <span class="arCalibrationEyebrow">선택 사항</span>
-    <h2 id="arCalibrationIntroTitle">공간 높이 맞추기</h2>
-    <p>휴대폰 높이와 설치할 곳, 천장 높이를 기준으로 거리와 제품 높이를 보정합니다.</p>
+    <h2 id="arCalibrationIntroTitle">설치 거리 맞추기</h2>
+    <p>내 위치·내 높이·설치 지점으로 삼각 거리를 계산해 제품이 보이는 크기를 보정합니다.</p>
     <small>보정하는 동안에는 한 자리에 서서 진행해 주세요. 완료 후에는 자유롭게 이동할 수 있어요.</small>
     <div class="arCalibrationActions">
-      <button id="arCalibrationStartBtn" type="button" class="primary">크기 맞추기</button>
+      <button id="arCalibrationStartBtn" type="button" class="primary">거리 맞추기</button>
       <button id="arCalibrationSkipBtn" type="button">건너뛰고 바로 배치</button>
     </div>
   </section>
 
   <section id="arCalibrationPanel" class="arCalibrationCard" role="dialog" aria-modal="true" aria-labelledby="arCalibrationTitle">
-    <span class="arCalibrationEyebrow">3점 공간 보정</span>
-    <h2 id="arCalibrationTitle">설치 위치와 천장점을 지정하세요</h2>
+    <span class="arCalibrationEyebrow">2점 거리 보정</span>
+    <h2 id="arCalibrationTitle">설치 지점을 지정하세요</h2>
     <div class="arCalibrationSteps" aria-label="공간 보정 단계">
-      <span data-ar-step="0">1 휴대폰 높이</span>
-      <span data-ar-step="1">2 설치할 곳</span>
-      <span data-ar-step="2">3 천장점</span>
+      <span data-ar-step="0">1 내 위치</span>
+      <span data-ar-step="1">2 설치 지점</span>
     </div>
-    <p id="arCalibrationStatus">현재 휴대폰 높이를 입력해 주세요.</p>
+    <p id="arCalibrationStatus">내 높이를 입력한 뒤 설치 지점을 지정해 주세요.</p>
     <label class="arCalibrationInput" for="arPhoneHeight">
-      <span>휴대폰 높이</span>
+      <span>내 높이</span>
       <input id="arPhoneHeight" type="number" min="50" max="220" step="1" inputmode="decimal" value="140" />
       <b>cm</b>
     </label>
-    <small class="arCalibrationInputHelp">바닥에서 휴대폰 카메라 렌즈까지의 높이</small>
-    <label class="arCalibrationInput" for="arCalibrationLength">
-      <span>실제 천장고</span>
-      <input id="arCalibrationLength" type="number" min="100" step="1" inputmode="decimal" value="240" />
-      <b>cm</b>
-    </label>
+    <small class="arCalibrationInputHelp">바닥에서 휴대폰 카메라 렌즈까지 · 거리와 크기 계산에 반영</small>
     <div class="arCalibrationActions compact">
-      <button id="arCalibrationRepickBtn" type="button">세 점 다시 지정</button>
+      <button id="arCalibrationRepickBtn" type="button">다시 지정</button>
       <button id="arCalibrationApplyBtn" type="button" class="primary" disabled>보정 완료</button>
     </div>
     <button id="arCalibrationCancelBtn" type="button" class="arCalibrationTextButton">건너뛰고 바로 배치</button>
   </section>
 
-  <div id="arCalibrationBadge">✓ 실측 보정됨</div>
+  <div id="arCalibrationBadge">✓ 거리 보정됨</div>
 
   <!-- 상단 컨트롤 -->
   <div id="topBar">
@@ -128,9 +122,8 @@
       <line id="calibrationLine" x1="0" y1="0" x2="0" y2="0"></line>
       <line id="calibrationDistanceLine" x1="0" y1="0" x2="0" y2="0"></line>
     </svg>
-    <button class="calibrationHandle" data-point-index="0" type="button" aria-label="휴대폰 위치"></button>
-    <button class="calibrationHandle" data-point-index="1" type="button" aria-label="설치할 곳"></button>
-    <button class="calibrationHandle" data-point-index="2" type="button" aria-label="천장점"></button>
+    <button class="calibrationHandle" data-point-index="0" type="button" aria-label="내 위치"></button>
+    <button class="calibrationHandle" data-point-index="1" type="button" aria-label="설치 지점"></button>
   </div>
 
   <section id="calibrationPanel" aria-label="기준 길이 설정">
@@ -303,6 +296,6 @@
   }
   </script>
 
-  <script type="module" src="js/app.js?v=20260723-product-angle1"></script>
+  <script type="module" src="js/app.js?v=20260724-two-point-distance1"></script>
 </body>
 </html>
