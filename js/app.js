@@ -2457,7 +2457,6 @@ function onPhotoPreviewPointerMove(event) {
 
     selectedObject.position.copy(previewGesture.position).add(delta);
     applyInteractiveScale(nextScale);
-    selectedObject.rotation.z = previewGesture.rotationZ + current.angle - previewGesture.angle;
     updateDimensionOverlay();
   } else if (pointers.length === 1 && point.mode === "scale") {
     const deltaY = point.startY - point.y;
@@ -2505,8 +2504,7 @@ function getPhotoPreviewGestureState() {
       type: "pinch",
       ...metrics,
       position: selectedObject.position.clone(),
-      scale: getUserScale(selectedObject),
-      rotationZ: selectedObject.rotation.z
+      scale: getUserScale(selectedObject)
     };
   }
 
@@ -2726,8 +2724,7 @@ function getTwoPointerMetrics(a, b) {
       x: (a.x + b.x) / 2,
       y: (a.y + b.y) / 2
     },
-    distance: Math.hypot(dx, dy),
-    angle: Math.atan2(dy, dx)
+    distance: Math.hypot(dx, dy)
   };
 }
 
