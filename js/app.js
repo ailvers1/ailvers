@@ -16,7 +16,6 @@ const dom = {
   arCalibrationPanel: $("arCalibrationPanel"),
   arCalibrationStatus: $("arCalibrationStatus"),
   arPhoneHeight: $("arPhoneHeight"),
-  arCalibrationLength: $("arCalibrationLength"),
   arCalibrationApplyBtn: $("arCalibrationApplyBtn"),
   arCalibrationBadge: $("arCalibrationBadge"),
   uiFoldBtn: $("uiFoldBtn"),
@@ -377,12 +376,6 @@ function bindEvents() {
   safeClick("arCalibrationRepickBtn", startArCalibrationMode);
   safeClick("arCalibrationApplyBtn", applyArCalibration);
 
-  document.querySelectorAll("[data-ar-reference-cm]").forEach((button) => {
-    button.addEventListener("click", () => {
-      if (dom.arCalibrationLength) dom.arCalibrationLength.value = button.dataset.arReferenceCm;
-    });
-  });
-
   safeClick("clearBtn", clearAll);
 
   bindHoldTranslate("moveForward", "forward");
@@ -535,7 +528,7 @@ function onCalibrationPointerDown(event) {
 
   if (handle) {
     const pointIndex = Number(handle.dataset.pointIndex);
-    if (arFlowMode === "calibration" && pointIndex !== 2) return;
+    if (arFlowMode === "calibration") return;
     calibration.draggingIndex = pointIndex;
     event.preventDefault();
     return;
@@ -596,7 +589,6 @@ function renderCalibrationOverlay() {
 
   dom.calibrationLayer.classList.toggle("has-point-1", calibration.points.length >= 1);
   dom.calibrationLayer.classList.toggle("has-point-2", calibration.points.length >= 2);
-  dom.calibrationLayer.classList.toggle("has-point-3", calibration.points.length >= 3);
   dom.calibrationLayer.classList.toggle("has-line", calibration.points.length >= 2);
 
   const handles = dom.calibrationLayer.querySelectorAll(".calibrationHandle");
@@ -608,12 +600,8 @@ function renderCalibrationOverlay() {
   });
 
   if (calibration.points.length >= 2 && dom.calibrationLine) {
-    const point1 = arFlowMode === "calibration" && calibration.points.length >= 3
-      ? calibration.points[1]
-      : calibration.points[0];
-    const point2 = arFlowMode === "calibration" && calibration.points.length >= 3
-      ? calibration.points[2]
-      : calibration.points[1];
+    const point1 = calibration.points[0];
+    const point2 = calibration.points[1];
     dom.calibrationLine.setAttribute("x1", String(point1.x * 100));
     dom.calibrationLine.setAttribute("y1", String(point1.y * 100));
     dom.calibrationLine.setAttribute("x2", String(point2.x * 100));
@@ -1251,7 +1239,7 @@ function beginArCalibrationChoice() {
   calibration.isPicking = false;
   calibration.draggingIndex = null;
   calibration.applied = false;
-  dom.calibrationLayer?.classList.remove("is-picking", "has-point-1", "has-point-2", "has-point-3", "has-line");
+  dom.calibrationLayer?.classList.remove("is-picking", "has-point-1", "has-point-2", "has-line");
   document.body.classList.remove("ar-calibration-active");
   dom.topBar?.classList.remove("show");
   dom.arCalibrationPanel?.classList.remove("show");
@@ -1294,16 +1282,14 @@ function updateArCalibrationStatus() {
   document.querySelectorAll("[data-ar-step]").forEach((step) => {
     const index = Number(step.dataset.arStep);
     step.classList.toggle("done", index < count);
-    step.classList.toggle("active", index === Math.min(count, 2));
+    step.classList.toggle("active", index === Math.min(count, 1));
   });
   if (dom.arCalibrationStatus) {
     dom.arCalibrationStatus.textContent = count <= 1
-      ? "높이를 입력한 뒤 십자 표시를 설치할 바닥에 맞추고 화면을 누르세요."
-      : count === 2
-        ? `휴대폰 높이 반영 · 설치 거리 ${calibration.arInstallDistance.toFixed(1)}m · 이제 천장점을 누르세요.`
-        : `세 점 지정 완료 · 높이 기준 ${Math.round(getArHeightPixelLength())}px`;
+      ? "내 높이를 입력한 뒤 십자 표시를 설치 지점에 맞추고 화면을 누르세요."
+      : `두 지점 확인 완료 · 예상 설치 거리 ${calibration.arInstallDistance.toFixed(1)}m`;
   }
-  if (dom.arCalibrationApplyBtn) dom.arCalibrationApplyBtn.disabled = count < 3;
+  if (dom.arCalibrationApplyBtn) dom.arCalibrationApplyBtn.disabled = count < 2;
 }
 
 function onArCalibrationPoint(event) {
@@ -1348,54 +1334,25 @@ function onArCalibrationPoint(event) {
     calibration.arInstallMatrix = lastStablePlacementMatrix.clone();
     calibration.arInstallMatrix.setPosition(calibration.arInstallPosition);
     calibration.points.push({ x: 0.5, y: 0.5 });
-    renderCalibrationOverlay();
-    updateArCalibrationStatus();
-    return;
-  }
-
-  if (calibration.points.length === 2) {
-    const ceilingPoint = normalizeCalibrationPoint(event.clientX, event.clientY);
-    const floorPoint = calibration.points[1];
-    if (Math.abs(ceilingPoint.y - floorPoint.y) * window.innerHeight < 80) {
-      showToast("바닥점과 천장점을 더 멀리 지정해 주세요.");
-      return;
-    }
-    calibration.points.push(ceilingPoint);
     calibration.isPicking = false;
     dom.calibrationLayer?.classList.remove("is-picking");
     renderCalibrationOverlay();
     updateArCalibrationStatus();
+    return;
   }
-}
-
-function getArHeightPixelLength() {
-  if (calibration.points.length < 3) return 0;
-  const floorPoint = calibration.points[1];
-  const ceilingPoint = calibration.points[2];
-  return Math.hypot(
-    (ceilingPoint.x - floorPoint.x) * window.innerWidth,
-    (ceilingPoint.y - floorPoint.y) * window.innerHeight
-  );
 }
 
 function applyArCalibration() {
   if (arFlowMode !== "calibration") return;
 
-  const pixelLength = getArHeightPixelLength();
-  const referenceCm = Number(dom.arCalibrationLength?.value);
-
-  if (calibration.points.length < 3 || !calibration.arInstallPosition || pixelLength < 80) {
-    showToast("휴대폰 높이, 설치할 곳, 천장점을 모두 지정해 주세요.");
-    return;
-  }
-  if (!Number.isFinite(referenceCm) || referenceCm <= 0) {
-    showToast("실제 천장고를 입력해 주세요.");
+  if (calibration.points.length < 2 || !calibration.arViewerPosition || !calibration.arInstallPosition) {
+    showToast("내 위치와 설치 지점을 확인해 주세요.");
     return;
   }
 
-  calibration.referenceMeters = referenceCm / 100;
-  calibration.pixelLength = pixelLength;
-  calibration.pixelsPerMeter = pixelLength / calibration.referenceMeters;
+  calibration.referenceMeters = 0;
+  calibration.pixelLength = 0;
+  calibration.pixelsPerMeter = 0;
   calibration.applied = true;
   arCalibrationApplied = true;
   enterArPlacementMode(true);
@@ -1422,23 +1379,15 @@ function enterArPlacementMode(keepCalibration = false) {
   dom.arCalibrationPanel?.classList.remove("show");
   dom.arCalibrationBadge?.classList.toggle("show", arCalibrationApplied);
   if (dom.arCalibrationBadge && arCalibrationApplied) {
-    dom.arCalibrationBadge.textContent = `✓ 높이 보정 · 천장고 ${formatReferenceLength(calibration.referenceMeters)}`;
+    dom.arCalibrationBadge.textContent = `✓ 거리 보정 · 설치 ${calibration.arInstallDistance.toFixed(1)}m`;
   }
   dom.topBar?.classList.add("show");
   resetPlacementTracking("searching");
-  showToast(arCalibrationApplied ? "공간 높이 보정 완료. 제품을 배치해 주세요." : "바닥을 비춰 제품을 배치해 주세요.");
+  showToast(arCalibrationApplied ? "설치 거리 보정 완료. 제품을 배치해 주세요." : "바닥을 비춰 제품을 배치해 주세요.");
 }
 
 function getArCalibrationScale(productHeight) {
-  if (!arCalibrationApplied || calibration.pixelsPerMeter <= 0 || placementDistanceMeters <= 0) return 1;
-
-  const projectionScaleY = Math.abs(camera.projectionMatrix.elements[5]);
-  if (!Number.isFinite(projectionScaleY) || projectionScaleY < 0.0001) return 1;
-
-  const targetPixelHeight = productHeight * calibration.pixelsPerMeter;
-  const visibleWorldHeight = (2 * placementDistanceMeters) / projectionScaleY;
-  const targetWorldHeight = visibleWorldHeight * (targetPixelHeight / Math.max(window.innerHeight, 1));
-  return THREE.MathUtils.clamp(targetWorldHeight / Math.max(productHeight, 0.0001), 0.5, 2);
+  return 1;
 }
 
 async function startAR() {
