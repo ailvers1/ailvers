@@ -1143,7 +1143,7 @@ body.ar-calibration-active .calibrationHandle[data-point-index="1"] {
 
 .arCalibrationSteps {
   display: grid;
-  grid-template-columns: repeat(2, 1fr);
+  grid-template-columns: repeat(4, 1fr);
   gap: 5px;
   margin: 11px 0 10px;
 }
@@ -1170,13 +1170,40 @@ body.ar-calibration-active .calibrationHandle[data-point-index="1"] {
   color: #bbf7d0;
 }
 
+.arCalibrationSteps span.optional::after {
+  content: " · 선택";
+  opacity: .72;
+}
+
+.arCalibrationStage {
+  display: none;
+}
+
+.arCalibrationStage.show {
+  display: block;
+}
+
+#arCalibrationSkipCeilingBtn {
+  display: none;
+}
+
+#arCalibrationSkipCeilingBtn.show {
+  display: block;
+  color: #bae6fd;
+}
+
+.arCalibrationTextButton.hide {
+  display: none;
+}
+
 .arCalibrationInputHelp {
   margin: 4px 0 0 2px !important;
   color: #71849c !important;
   font-size: 8px !important;
 }
 
-#arPhoneHeight {
+#arPhoneHeight,
+#arCeilingHeight {
   width: 100%;
   min-width: 0;
   padding: 8px 9px;
