@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, user-scalable=no" />
   <title>SYSMATE AR 제품 배치</title>
-  <link rel="stylesheet" href="css/style.css?v=20260724-two-point-distance1" />
+  <link rel="stylesheet" href="css/style.css?v=20260727-calibration-wizard1" />
 </head>
 <body>
   <div id="photoPreviewBg"></div>
@@ -61,23 +61,36 @@
   </section>
 
   <section id="arCalibrationPanel" class="arCalibrationCard" role="dialog" aria-modal="true" aria-labelledby="arCalibrationTitle">
-    <span class="arCalibrationEyebrow">2점 거리 보정</span>
-    <h2 id="arCalibrationTitle">설치 지점을 지정하세요</h2>
+    <span class="arCalibrationEyebrow">공간 캘리브레이션</span>
+    <h2 id="arCalibrationTitle">내 위치를 확인해 주세요</h2>
     <div class="arCalibrationSteps" aria-label="공간 보정 단계">
       <span data-ar-step="0">1 내 위치</span>
-      <span data-ar-step="1">2 설치 지점</span>
+      <span data-ar-step="1">2 내 높이</span>
+      <span data-ar-step="2">3 설치 지점</span>
+      <span data-ar-step="3" class="optional">4 천장고</span>
     </div>
-    <p id="arCalibrationStatus">내 높이를 입력한 뒤 설치 지점을 지정해 주세요.</p>
-    <label class="arCalibrationInput" for="arPhoneHeight">
-      <span>내 높이</span>
-      <input id="arPhoneHeight" type="number" min="50" max="220" step="1" inputmode="decimal" value="140" />
-      <b>cm</b>
-    </label>
-    <small class="arCalibrationInputHelp">바닥에서 휴대폰 카메라 렌즈까지 · 거리와 크기 계산에 반영</small>
+    <p id="arCalibrationStatus">현재 자리에 서서 위치를 확인해 주세요.</p>
+    <div class="arCalibrationStage" data-ar-stage="1">
+      <label class="arCalibrationInput" for="arPhoneHeight">
+        <span>내 높이</span>
+        <input id="arPhoneHeight" type="number" min="50" max="220" step="1" inputmode="decimal" value="140" />
+        <b>cm</b>
+      </label>
+      <small class="arCalibrationInputHelp">바닥에서 휴대폰 카메라 렌즈까지의 높이</small>
+    </div>
+    <div class="arCalibrationStage" data-ar-stage="3">
+      <label class="arCalibrationInput" for="arCeilingHeight">
+        <span>천장고</span>
+        <input id="arCeilingHeight" type="number" min="150" max="1000" step="1" inputmode="decimal" value="240" />
+        <b>cm</b>
+      </label>
+      <small class="arCalibrationInputHelp">선택 사항 · 설치 가능 높이를 확인할 때 사용</small>
+    </div>
     <div class="arCalibrationActions compact">
-      <button id="arCalibrationRepickBtn" type="button">다시 지정</button>
-      <button id="arCalibrationApplyBtn" type="button" class="primary" disabled>보정 완료</button>
+      <button id="arCalibrationRepickBtn" type="button" disabled>이전</button>
+      <button id="arCalibrationApplyBtn" type="button" class="primary">위치 확인</button>
     </div>
+    <button id="arCalibrationSkipCeilingBtn" type="button" class="arCalibrationTextButton">천장고 건너뛰기</button>
     <button id="arCalibrationCancelBtn" type="button" class="arCalibrationTextButton">건너뛰고 바로 배치</button>
   </section>
 
@@ -296,6 +309,6 @@
   }
   </script>
 
-  <script type="module" src="js/app.js?v=20260724-photo-pinch-stable1"></script>
+  <script type="module" src="js/app.js?v=20260727-calibration-wizard1"></script>
 </body>
 </html>
