@@ -52,7 +52,7 @@
   <section id="arCalibrationIntro" class="arCalibrationCard" role="dialog" aria-modal="true" aria-labelledby="arCalibrationIntroTitle">
     <span class="arCalibrationEyebrow">선택 사항</span>
     <h2 id="arCalibrationIntroTitle">설치 거리 맞추기</h2>
-    <p>내 위치·내 높이·설치 지점으로 삼각 거리를 계산해 제품이 보이는 크기를 보정합니다.</p>
+    <p>내 위치·휴대폰 높이·설치 지점으로 삼각 거리를 계산해 제품이 보이는 크기를 보정합니다.</p>
     <small>보정하는 동안에는 한 자리에 서서 진행해 주세요. 완료 후에는 자유롭게 이동할 수 있어요.</small>
     <div class="arCalibrationActions">
       <button id="arCalibrationStartBtn" type="button" class="primary">거리 맞추기</button>
@@ -65,14 +65,14 @@
     <h2 id="arCalibrationTitle">내 위치를 확인해 주세요</h2>
     <div class="arCalibrationSteps" aria-label="공간 보정 단계">
       <span data-ar-step="0">1 내 위치</span>
-      <span data-ar-step="1">2 내 높이</span>
+      <span data-ar-step="1">2 휴대폰 높이</span>
       <span data-ar-step="2">3 설치 지점</span>
       <span data-ar-step="3" class="optional">4 천장고</span>
     </div>
     <p id="arCalibrationStatus">현재 자리에 서서 위치를 확인해 주세요.</p>
     <div class="arCalibrationStage" data-ar-stage="1">
       <label class="arCalibrationInput" for="arPhoneHeight">
-        <span>내 높이</span>
+        <span>휴대폰 높이</span>
         <input id="arPhoneHeight" type="number" min="50" max="220" step="1" inputmode="decimal" value="140" />
         <b>cm</b>
       </label>
@@ -204,7 +204,7 @@
       <div class="editProductMeta">
         <div class="editEyebrow"><i></i> 선택한 제품</div>
         <div id="editTitle">선택된 제품 없음</div>
-        <div id="editDistance">현재 거리 -</div>
+        <div id="editDistance">기기에서 제품까지 -</div>
       </div>
       <button id="editDoneBtn" type="button">완료</button>
     </div>
@@ -319,6 +319,6 @@
   }
   </script>
 
-  <script type="module" src="js/app.js?v=20260727-far-floor1"></script>
+  <script type="module" src="js/app.js?v=20260727-clear-distance1"></script>
 </body>
 </html>
