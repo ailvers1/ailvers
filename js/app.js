@@ -141,6 +141,8 @@ let screenMediaReturnObject = null;
 let screenMediaOriginatedInAr = false;
 let screenMediaApplyInProgress = false;
 let resumeArSessionRequested = false;
+let screenMediaResumeObject = null;
+let pendingMediaRepositionObject = null;
 
 let products = [];
 let currentProduct = null;
@@ -1016,7 +1018,9 @@ function updatePlacementGuideUi(state = "searching") {
 
   if (dom.placeBtn && isArSessionActive() && !previewMode) {
     dom.placeBtn.disabled = !placementStable;
-    dom.placeBtn.textContent = placementStable ? "📍 이 위치에 배치" : "바닥 인식 중";
+    dom.placeBtn.textContent = placementStable
+      ? (pendingMediaRepositionObject ? "📍 이 위치에 다시 배치" : "📍 이 위치에 배치")
+      : "바닥 인식 중";
   }
 }
 
@@ -1607,8 +1611,14 @@ async function startAR() {
       dom.topBar?.classList.add("show");
       dom.arCalibrationIntro?.classList.remove("show");
       dom.arCalibrationPanel?.classList.remove("show");
-      if (selectedObject) selectObject(selectedObject);
-      showToast("콘텐츠를 적용하고 AR 화면으로 돌아왔습니다.");
+      const resumeTarget = screenMediaResumeObject
+        || selectedObject
+        || placedObjects[placedObjects.length - 1];
+      pendingMediaRepositionObject = resumeTarget || null;
+      if (pendingMediaRepositionObject) pendingMediaRepositionObject.visible = false;
+      selectObject(null);
+      resetPlacementTracking("searching");
+      showToast("바닥을 다시 인식한 뒤 원래 설치 지점을 눌러주세요.");
     } else {
       resumeArSessionRequested = false;
       beginArCalibrationChoice();
@@ -1808,6 +1818,30 @@ async function placeCurrentProduct() {
 
   if (!reticleObject.visible || !placementStable) {
     showToast("초록색 배치 위치가 표시될 때까지 잠시 기다려주세요.");
+    return;
+  }
+
+  if (pendingMediaRepositionObject) {
+    const target = pendingMediaRepositionObject;
+    const before = snapshotScene();
+    const targetProduct = products.find((product) => product.id === target.userData.productId);
+
+    target.matrixAutoUpdate = true;
+    target.position.setFromMatrixPosition(lastStablePlacementMatrix);
+    faceModelToCamera(target);
+    if (targetProduct?.rotationYDeg) {
+      target.rotation.y += THREE.MathUtils.degToRad(targetProduct.rotationYDeg);
+    }
+    rememberDefaultRotation(target);
+    target.userData.placementDistance = placementDistanceMeters;
+    rememberInitialPlacement(target);
+    target.visible = true;
+    pendingMediaRepositionObject = null;
+    screenMediaResumeObject = null;
+    queuePlacementAnchor(target);
+    recordHistory(before);
+    selectObject(target);
+    showToast("미디어를 유지한 채 설치 지점에 다시 배치했습니다.");
     return;
   }
 
@@ -2334,6 +2368,7 @@ async function handleScreenMediaFile(event) {
   const target = screenMediaReturnObject || selectedObject;
   screenMediaPickerOpen = false;
   screenMediaReturnObject = null;
+  if (target) screenMediaResumeObject = target;
   let returnMessage = "미디어 선택을 마쳤습니다.";
 
   if (!file || !target) {
@@ -2389,6 +2424,7 @@ async function handleScreenMediaFile(event) {
 
 function handleScreenMediaCancel() {
   screenMediaPickerOpen = false;
+  if (screenMediaReturnObject) screenMediaResumeObject = screenMediaReturnObject;
   screenMediaReturnObject = null;
   finishScreenMediaPickerFlow("미디어 선택을 취소했습니다. AR 화면으로 돌아갈 수 있습니다.");
 }
@@ -2436,10 +2472,13 @@ function resumeArAfterScreenMedia() {
 }
 
 function exitScreenMediaResume() {
+  if (pendingMediaRepositionObject) pendingMediaRepositionObject.visible = true;
   screenMediaPickerOpen = false;
   screenMediaOriginatedInAr = false;
   screenMediaApplyInProgress = false;
   screenMediaReturnObject = null;
+  screenMediaResumeObject = null;
+  pendingMediaRepositionObject = null;
   resumeArSessionRequested = false;
   arFlowMode = "idle";
   dom.arMediaResumeCard?.classList.remove("show");
@@ -3359,6 +3398,8 @@ function clearPlacedObjects() {
 
   placedObjects = [];
   pendingAnchorObject = null;
+  screenMediaResumeObject = null;
+  pendingMediaRepositionObject = null;
   updateScreenMediaUi();
 }
 
