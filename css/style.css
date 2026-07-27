@@ -146,6 +146,17 @@ body.capture-ui-hidden #captureModeHint:not(.is-clear) {
   transform: translate(-50%, -50%);
 }
 
+#arMediaResumeCard {
+  top: 50%;
+  z-index: 110;
+  transform: translate(-50%, -50%);
+  text-align: center;
+}
+
+#arMediaResumeCard .arCalibrationActions {
+  margin-top: 16px;
+}
+
 #arCalibrationPanel {
   bottom: calc(env(safe-area-inset-bottom, 0px) + 14px);
 }
