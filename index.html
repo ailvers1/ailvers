@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, user-scalable=no" />
   <title>SYSMATE AR 제품 배치</title>
-  <link rel="stylesheet" href="css/style.css?v=20260727-location-floor1" />
+  <link rel="stylesheet" href="css/style.css?v=20260727-media-return1" />
 </head>
 <body>
   <div id="photoPreviewBg"></div>
@@ -95,6 +95,16 @@
   </section>
 
   <div id="arCalibrationBadge">✓ 거리 보정됨</div>
+
+  <section id="arMediaResumeCard" class="arCalibrationCard" role="dialog" aria-modal="true" aria-labelledby="arMediaResumeTitle">
+    <span class="arCalibrationEyebrow">화면 콘텐츠</span>
+    <h2 id="arMediaResumeTitle">미디어 적용 완료</h2>
+    <p id="arMediaResumeStatus">AR 화면으로 돌아가 제품을 계속 확인하세요.</p>
+    <div class="arCalibrationActions">
+      <button id="arMediaResumeBtn" type="button" class="primary">AR로 돌아가기</button>
+      <button id="arMediaExitBtn" type="button">시작 화면으로</button>
+    </div>
+  </section>
 
   <!-- 상단 컨트롤 -->
   <div id="topBar">
@@ -309,6 +319,6 @@
   }
   </script>
 
-  <script type="module" src="js/app.js?v=20260727-location-floor1"></script>
+  <script type="module" src="js/app.js?v=20260727-media-return1"></script>
 </body>
 </html>
