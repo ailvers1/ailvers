@@ -2495,7 +2495,8 @@ function createScreenMedia(file) {
 
 function prepareCustomScreenTexture(texture) {
   texture.colorSpace = THREE.SRGBColorSpace;
-  texture.flipY = false;
+  // The kiosk screen UVs expect user-provided image/video sources in canvas orientation.
+  texture.flipY = true;
   texture.wrapS = THREE.ClampToEdgeWrapping;
   texture.wrapT = THREE.ClampToEdgeWrapping;
   texture.minFilter = THREE.LinearFilter;
