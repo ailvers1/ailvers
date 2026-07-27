@@ -23,6 +23,10 @@ const dom = {
   arCalibrationSkipCeilingBtn: $("arCalibrationSkipCeilingBtn"),
   arCalibrationCancelBtn: $("arCalibrationCancelBtn"),
   arCalibrationBadge: $("arCalibrationBadge"),
+  arMediaResumeCard: $("arMediaResumeCard"),
+  arMediaResumeStatus: $("arMediaResumeStatus"),
+  arMediaResumeBtn: $("arMediaResumeBtn"),
+  arMediaExitBtn: $("arMediaExitBtn"),
   uiFoldBtn: $("uiFoldBtn"),
   productSelect: $("productSelect"),
   loadBtn: $("loadBtn"),
@@ -134,6 +138,8 @@ let arFlowMode = "idle";
 let arCalibrationApplied = false;
 let screenMediaPickerOpen = false;
 let screenMediaReturnObject = null;
+let screenMediaOriginatedInAr = false;
+let screenMediaApplyInProgress = false;
 let resumeArSessionRequested = false;
 
 let products = [];
@@ -374,6 +380,8 @@ function bindEvents() {
   safeClick("placementResetBtn", resetSelectedPlacement);
   safeClick("screenMediaChooseBtn", requestScreenMedia);
   safeClick("screenMediaRemoveBtn", removeSelectedScreenMedia);
+  safeClick("arMediaResumeBtn", resumeArAfterScreenMedia);
+  safeClick("arMediaExitBtn", exitScreenMediaResume);
   safeClick("uiFoldBtn", toggleUiFold);
   safeClick("captureHintBtn", captureScreen);
   window.addEventListener("pointerdown", restoreCaptureUiOnPointer, true);
@@ -1567,6 +1575,8 @@ async function startAR() {
     resetPlacementTracking("searching");
     dom.photoPreviewBg?.classList.remove("show");
     dom.photoPreviewHint?.classList.remove("show");
+    dom.arMediaResumeCard?.classList.remove("show");
+    screenMediaOriginatedInAr = false;
     orbitControls.enabled = false;
     previewGrid.visible = false;
     dom.startScreen.classList.add("hidden");
@@ -1594,10 +1604,18 @@ async function startAR() {
       resetPlacementTracking("searching");
       dom.reticle.style.display = "none";
       dom.arPlacementGuide?.classList.remove("show");
-      if (screenMediaPickerOpen) {
+      if (screenMediaPickerOpen || screenMediaOriginatedInAr) {
         arFlowMode = "suspended-media";
         dom.startScreen.classList.add("hidden");
         dom.topBar.classList.remove("show");
+        if (!screenMediaPickerOpen) {
+          showScreenMediaResume(
+            screenMediaApplyInProgress
+              ? "미디어를 제품 화면에 적용하는 중입니다."
+              : "미디어 선택을 마쳤습니다. AR 화면으로 돌아갈 수 있습니다.",
+            screenMediaApplyInProgress
+          );
+        }
         return;
       }
       arFlowMode = "idle";
@@ -1628,6 +1646,9 @@ async function startAR() {
   } catch (err) {
     resumeArSessionRequested = false;
     console.error("AR 시작 실패:", err);
+    if (resumeExistingSession) {
+      showScreenMediaResume("AR 화면을 다시 열지 못했습니다. 다시 시도하거나 시작 화면으로 이동해 주세요.");
+    }
     if (isReferenceSpaceError(err) && currentProduct) {
       alert("이 기기는 WebXR AR 기준 좌표계를 지원하지 않아 기본 AR 뷰어로 전환합니다.\n\n기본 AR 뷰어에서는 제품 확인은 가능하지만 앱 안의 이동/회전 버튼은 사용할 수 없습니다.");
       openNativeArFallback(currentProduct);
@@ -2273,34 +2294,51 @@ function requestScreenMedia() {
   }
 
   screenMediaPickerOpen = isArSessionActive();
+  screenMediaOriginatedInAr = screenMediaPickerOpen;
+  screenMediaApplyInProgress = false;
   screenMediaReturnObject = selectedObject;
   dom.screenMediaInput.value = "";
+  window.addEventListener("focus", handleScreenMediaPickerWindowFocus, { once: true });
   dom.screenMediaInput.click();
+}
+
+function handleScreenMediaPickerWindowFocus() {
+  window.setTimeout(() => {
+    if (screenMediaPickerOpen && !dom.screenMediaInput?.files?.length) {
+      handleScreenMediaCancel();
+    }
+  }, 500);
 }
 
 async function handleScreenMediaFile(event) {
   const file = event.target.files?.[0];
   const target = screenMediaReturnObject || selectedObject;
-  const shouldResumeAr = screenMediaPickerOpen && !isArSessionActive();
   screenMediaPickerOpen = false;
   screenMediaReturnObject = null;
-  if (shouldResumeAr) {
-    resumeArSessionRequested = true;
-    startAR();
+  let returnMessage = "미디어 선택을 마쳤습니다.";
+
+  if (!file || !target) {
+    finishScreenMediaPickerFlow(returnMessage);
+    return;
   }
-  if (!file || !target) return;
 
   if (!file.type.startsWith("image/") && !file.type.startsWith("video/")) {
     showToast("이미지 또는 영상 파일을 선택해 주세요.");
+    finishScreenMediaPickerFlow("지원하지 않는 파일입니다. AR 화면으로 돌아갈 수 있습니다.");
     return;
   }
 
   if (file.size > 150 * 1024 * 1024) {
     showToast("150MB 이하의 파일을 선택해 주세요.");
+    finishScreenMediaPickerFlow("파일이 너무 큽니다. AR 화면으로 돌아갈 수 있습니다.");
     return;
   }
 
   try {
+    screenMediaApplyInProgress = true;
+    if (screenMediaOriginatedInAr && !isArSessionActive()) {
+      showScreenMediaResume("미디어를 제품 화면에 적용하는 중입니다.", true);
+    }
     setScreenMediaBusy(true, "콘텐츠 준비 중...");
     const media = await createScreenMedia(file);
 
@@ -2318,22 +2356,77 @@ async function handleScreenMediaFile(event) {
 
     updateScreenMediaUi();
     showToast(`${file.type.startsWith("video/") ? "영상" : "이미지"}을 제품 화면에 적용했습니다.`);
+    returnMessage = `${file.type.startsWith("video/") ? "영상" : "이미지"}이 제품 화면에 적용되었습니다.`;
   } catch (err) {
     console.error("Screen media apply failed:", err);
     showToast("화면 콘텐츠를 불러오지 못했습니다.");
+    returnMessage = "미디어를 불러오지 못했습니다. AR 화면으로 돌아갈 수 있습니다.";
   } finally {
+    screenMediaApplyInProgress = false;
     setScreenMediaBusy(false);
+    finishScreenMediaPickerFlow(returnMessage);
   }
 }
 
 function handleScreenMediaCancel() {
-  const shouldResumeAr = screenMediaPickerOpen && !isArSessionActive();
   screenMediaPickerOpen = false;
   screenMediaReturnObject = null;
-  if (shouldResumeAr) {
-    resumeArSessionRequested = true;
-    startAR();
+  finishScreenMediaPickerFlow("미디어 선택을 취소했습니다. AR 화면으로 돌아갈 수 있습니다.");
+}
+
+function finishScreenMediaPickerFlow(message) {
+  if (!screenMediaOriginatedInAr) return;
+
+  if (!isArSessionActive()) {
+    showScreenMediaResume(message);
+    return;
   }
+
+  window.setTimeout(() => {
+    if (!screenMediaOriginatedInAr) return;
+    if (isArSessionActive()) {
+      screenMediaOriginatedInAr = false;
+    } else {
+      showScreenMediaResume(message);
+    }
+  }, 400);
+}
+
+function showScreenMediaResume(message = "AR 화면으로 돌아가 제품을 계속 확인하세요.", busy = false) {
+  arFlowMode = "suspended-media";
+  dom.startScreen?.classList.add("hidden");
+  dom.topBar?.classList.remove("show");
+  dom.editPanel?.classList.remove("show");
+  dom.arCalibrationIntro?.classList.remove("show");
+  dom.arCalibrationPanel?.classList.remove("show");
+  dom.arMediaResumeCard?.classList.add("show");
+  if (dom.arMediaResumeStatus) dom.arMediaResumeStatus.textContent = message;
+  if (dom.arMediaResumeBtn) dom.arMediaResumeBtn.disabled = busy;
+}
+
+function resumeArAfterScreenMedia() {
+  if (!placedObjects.length) {
+    exitScreenMediaResume();
+    return;
+  }
+
+  resumeArSessionRequested = true;
+  screenMediaOriginatedInAr = false;
+  dom.arMediaResumeCard?.classList.remove("show");
+  startAR();
+}
+
+function exitScreenMediaResume() {
+  screenMediaPickerOpen = false;
+  screenMediaOriginatedInAr = false;
+  screenMediaApplyInProgress = false;
+  screenMediaReturnObject = null;
+  resumeArSessionRequested = false;
+  arFlowMode = "idle";
+  dom.arMediaResumeCard?.classList.remove("show");
+  dom.topBar?.classList.remove("show");
+  dom.editPanel?.classList.remove("show");
+  dom.startScreen?.classList.remove("hidden");
 }
 
 function createScreenMedia(file) {
