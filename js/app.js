@@ -1267,7 +1267,7 @@ function resetSelectedPlacement() {
 function updateSelectedDistanceLabel() {
   if (!dom.editDistance) return;
   if (!selectedObject || !hasViewerPosition || photoPreviewMode) {
-    dom.editDistance.textContent = photoPreviewMode && selectedObject ? "사진 위 배치" : "현재 거리 -";
+    dom.editDistance.textContent = photoPreviewMode && selectedObject ? "사진 위 배치" : "기기에서 제품까지 -";
     return;
   }
 
@@ -1276,7 +1276,7 @@ function updateSelectedDistanceLabel() {
     position.x - lastViewerPosition.x,
     position.z - lastViewerPosition.z
   );
-  dom.editDistance.textContent = `현재 거리 ${distance.toFixed(1)}m`;
+  dom.editDistance.textContent = `기기에서 제품까지 ${distance.toFixed(1)}m`;
 }
 
 function beginArCalibrationChoice() {
@@ -1336,7 +1336,7 @@ function updateArCalibrationStatus() {
   const stepIndex = THREE.MathUtils.clamp(calibration.arStep, 0, 3);
   const titles = [
     "내 위치를 확인해 주세요",
-    "내 높이를 입력해 주세요",
+    "휴대폰 높이를 입력해 주세요",
     "설치 지점을 지정해 주세요",
     "천장고를 입력할까요?"
   ];
@@ -1401,7 +1401,7 @@ function advanceArCalibrationStep() {
   } else if (calibration.arStep === 1) {
     const phoneHeightCm = Number(dom.arPhoneHeight?.value);
     if (!Number.isFinite(phoneHeightCm) || phoneHeightCm < 50 || phoneHeightCm > 220) {
-      showToast("높이를 50~220cm 사이로 입력해 주세요.");
+      showToast("휴대폰 높이를 50~220cm 사이로 입력해 주세요.");
       return;
     }
     calibration.arPhoneHeightMeters = phoneHeightCm / 100;
