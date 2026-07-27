@@ -1063,6 +1063,7 @@ function updatePlacementCandidate(timestamp, frame, referenceSpace, hitTestResul
     if (placementGhost) placementGhost.visible = false;
     dom.reticle.style.display = "none";
     updatePlacementGuideUi(hitTestResults.length ? "wrong-surface" : "searching");
+    updateArCalibrationFloorState();
     return;
   }
 
@@ -1110,7 +1111,10 @@ function updatePlacementCandidate(timestamp, frame, referenceSpace, hitTestResul
   const hitMatrix = candidate.matrix.clone();
   hitMatrix.setPosition(smoothedReticlePosition);
   const previewVisible = !selectedObject
-    && (arFlowMode === "placement" || (arFlowMode === "calibration" && calibration.arStep === 2));
+    && (
+      arFlowMode === "placement"
+      || (arFlowMode === "calibration" && (calibration.arStep === 0 || calibration.arStep === 2))
+    );
   reticleObject.visible = previewVisible;
   reticleObject.matrix.copy(hitMatrix);
   dom.reticle.style.display = previewVisible ? "block" : "none";
@@ -1139,6 +1143,7 @@ function updatePlacementCandidate(timestamp, frame, referenceSpace, hitTestResul
     else state = "stable";
   }
   updatePlacementGuideUi(state);
+  updateArCalibrationFloorState();
 }
 
 function getArDistanceCorrection() {
@@ -1257,7 +1262,11 @@ function beginArCalibrationChoice() {
   calibration.arStep = 0;
   calibration.arCeilingHeightMeters = 0;
   dom.calibrationLayer?.classList.remove("is-picking", "has-point-1", "has-point-2", "has-line");
-  document.body.classList.remove("ar-calibration-active");
+  document.body.classList.remove(
+    "ar-calibration-active",
+    "ar-calibration-location-step",
+    "ar-calibration-location-ready"
+  );
   dom.topBar?.classList.remove("show");
   dom.arCalibrationPanel?.classList.remove("show");
   dom.arCalibrationIntro?.classList.add("show");
@@ -1330,14 +1339,33 @@ function updateArCalibrationStatus() {
   }
   dom.arCalibrationSkipCeilingBtn?.classList.toggle("show", stepIndex === 3);
   dom.arCalibrationCancelBtn?.classList.toggle("hide", stepIndex === 3);
+  document.body.classList.toggle("ar-calibration-location-step", stepIndex === 0);
+  if (stepIndex !== 0) document.body.classList.remove("ar-calibration-location-ready");
+  updateArCalibrationFloorState();
+}
+
+function updateArCalibrationFloorState() {
+  if (arFlowMode !== "calibration" || calibration.arStep !== 0) return;
+
+  const floorReady = placementStable && hasViewerPosition;
+  document.body.classList.toggle("ar-calibration-location-ready", floorReady);
+  if (dom.arCalibrationStatus) {
+    dom.arCalibrationStatus.textContent = floorReady
+      ? "발밑 바닥이 인식되었습니다. 내 위치를 확인해 주세요."
+      : "휴대폰으로 발밑 바닥을 천천히 비춰주세요.";
+  }
+  if (dom.arCalibrationApplyBtn) {
+    dom.arCalibrationApplyBtn.disabled = !floorReady;
+    dom.arCalibrationApplyBtn.textContent = floorReady ? "내 위치 확인" : "바닥을 찾는 중…";
+  }
 }
 
 function advanceArCalibrationStep() {
   if (arFlowMode !== "calibration") return;
 
   if (calibration.arStep === 0) {
-    if (!hasViewerPosition) {
-      showToast("위치를 확인하는 중입니다. 잠시 후 다시 눌러 주세요.");
+    if (!placementStable || !hasViewerPosition) {
+      showToast("발밑 바닥이 초록색으로 표시될 때까지 비춰주세요.");
       return;
     }
     calibration.arViewerPosition = lastViewerPosition.clone();
@@ -1474,7 +1502,11 @@ function enterArPlacementMode(keepCalibration = false) {
   calibration.isPicking = false;
   calibration.draggingIndex = null;
   calibration.points = [];
-  document.body.classList.remove("ar-calibration-active");
+  document.body.classList.remove(
+    "ar-calibration-active",
+    "ar-calibration-location-step",
+    "ar-calibration-location-ready"
+  );
   dom.calibrationLayer?.classList.remove("is-picking");
   renderCalibrationOverlay();
   dom.arCalibrationIntro?.classList.remove("show");
