@@ -188,15 +188,15 @@ const TEXTURE_SWAP_MS = 3000;
 const TEXTURE_FADE_MS = 320;
 const CAPTURE_HINT_MS = 4200;
 const DIMENSION_COLOR = 0x38bdf8;
-const FLOOR_NORMAL_MIN = Math.cos(THREE.MathUtils.degToRad(18));
-const PLACEMENT_WINDOW_MS = 650;
-const PLACEMENT_STABLE_MS = 450;
+const FLOOR_NORMAL_MIN = Math.cos(THREE.MathUtils.degToRad(24));
+const PLACEMENT_WINDOW_MS = 850;
+const PLACEMENT_STABLE_MS = 550;
 const PLACEMENT_MAX_DEVIATION = 0.035;
 const PLACEMENT_JUMP_DISTANCE = 0.25;
 // Field calibration: a detected 1.8 m floor hit measured about 1.2 m in reality.
 const AR_FLOOR_DISTANCE_CORRECTION = 1.2 / 1.8;
 const PLACEMENT_NEAR_DISTANCE = 1;
-const PLACEMENT_FAR_DISTANCE = 4;
+const PLACEMENT_FAR_DISTANCE = 6;
 let captureHintTimer = null;
 let captureModeHintTimer = null;
 let captureUiHidden = false;
@@ -985,8 +985,8 @@ function updatePlacementGuideUi(state = "searching") {
     "wrong-surface": ["바닥이 아닙니다", "화면 중앙을 설치할 바닥 쪽으로 이동해 주세요."],
     unstable: ["위치를 확인하는 중", "초록색이 될 때까지 휴대폰을 잠시 고정해 주세요."],
     stable: ["배치 위치 확인 완료", "실측 윤곽을 확인한 뒤 배치하세요."],
-    near: ["배치 가능 · 거리가 가깝습니다", "1~4m 거리에서 보면 실제 크기를 더 쉽게 비교할 수 있습니다."],
-    far: ["배치 가능 · 거리가 멉니다", "4m 이내에서 배치하면 크기 확인이 더 정확합니다."]
+    near: ["배치 가능 · 거리가 가깝습니다", "1~6m 거리에서 보면 실제 크기를 더 쉽게 비교할 수 있습니다."],
+    far: ["배치 가능 · 거리가 멉니다", "6m 이내에서 배치하면 크기 확인이 더 정확합니다."]
   };
   const [title, help] = labels[state] || labels.searching;
 
@@ -1041,7 +1041,16 @@ function updatePlacementCandidate(timestamp, frame, referenceSpace, hitTestResul
       matrix.elements[5],
       matrix.elements[6]
     ).normalize();
-    const floorLevelOk = arReferenceSpaceType !== "local-floor" || Math.abs(position.y) <= 0.35;
+    const rawHorizontalDistance = hasViewerPosition
+      ? Math.hypot(position.x - lastViewerPosition.x, position.z - lastViewerPosition.z)
+      : position.length();
+    const floorLevelTolerance = THREE.MathUtils.clamp(
+      0.35 + rawHorizontalDistance * 0.04,
+      0.35,
+      0.65
+    );
+    const floorLevelOk = arReferenceSpaceType !== "local-floor"
+      || Math.abs(position.y) <= floorLevelTolerance;
 
     if (normal.y < FLOOR_NORMAL_MIN || !floorLevelOk) continue;
 
@@ -1080,9 +1089,19 @@ function updatePlacementCandidate(timestamp, frame, referenceSpace, hitTestResul
   lastRawPlacementPosition.copy(candidate.rawPosition);
   placementDistanceMeters = candidate.distance;
   currentHitTestResult = candidate.result;
+  const jumpDistanceLimit = THREE.MathUtils.clamp(
+    PLACEMENT_JUMP_DISTANCE + placementDistanceMeters * 0.04,
+    PLACEMENT_JUMP_DISTANCE,
+    0.5
+  );
+  const stabilityDeviationLimit = THREE.MathUtils.clamp(
+    PLACEMENT_MAX_DEVIATION + placementDistanceMeters * 0.008,
+    PLACEMENT_MAX_DEVIATION,
+    0.085
+  );
 
   const previous = placementSamples[placementSamples.length - 1];
-  if (previous && previous.position.distanceTo(candidate.position) > PLACEMENT_JUMP_DISTANCE) {
+  if (previous && previous.position.distanceTo(candidate.position) > jumpDistanceLimit) {
     placementSamples = [];
   }
 
@@ -1100,15 +1119,15 @@ function updatePlacementCandidate(timestamp, frame, referenceSpace, hitTestResul
     ? timestamp - placementSamples[0].time
     : 0;
   const timeProgress = THREE.MathUtils.clamp(sampleDuration / PLACEMENT_STABLE_MS, 0, 1);
-  const qualityProgress = THREE.MathUtils.clamp(1 - rmsDeviation / PLACEMENT_MAX_DEVIATION, 0, 1);
+  const qualityProgress = THREE.MathUtils.clamp(1 - rmsDeviation / stabilityDeviationLimit, 0, 1);
   placementStabilityProgress = Math.min(timeProgress, qualityProgress);
   placementStable = placementSamples.length >= 8
     && sampleDuration >= PLACEMENT_STABLE_MS
-    && rmsDeviation <= PLACEMENT_MAX_DEVIATION;
+    && rmsDeviation <= stabilityDeviationLimit;
 
   if (
     !hasSmoothedReticlePosition ||
-    smoothedReticlePosition.distanceToSquared(candidate.position) > PLACEMENT_JUMP_DISTANCE ** 2
+    smoothedReticlePosition.distanceToSquared(candidate.position) > jumpDistanceLimit ** 2
   ) {
     smoothedReticlePosition.copy(candidate.position);
     hasSmoothedReticlePosition = true;
