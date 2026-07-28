@@ -2229,7 +2229,7 @@ body.ar-calibration-active .calibrationHandle[data-point-index="0"] {
 /* Keep the refined dock above legacy compact overrides. */
 #editPanel {
   width: min(336px, calc(100vw - 20px));
-  max-height: min(326px, calc(100dvh - 20px));
+  max-height: min(370px, calc(100dvh - 20px));
   bottom: calc(env(safe-area-inset-bottom, 0px) + 10px);
   gap: 9px;
   padding: 11px;
