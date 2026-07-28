@@ -57,6 +57,7 @@ const dom = {
   screenMediaStatus: $("screenMediaStatus"),
   screenMediaChooseBtn: $("screenMediaChooseBtn"),
   screenMediaRemoveBtn: $("screenMediaRemoveBtn"),
+  caseColorChips: $("caseColorChips"),
   editControls: $("editControls"),
   toast: $("toast"),
   captureHint: $("captureHint"),
@@ -130,6 +131,13 @@ let anchorRequestInFlight = false;
 const lastStablePlacementMatrix = new THREE.Matrix4();
 const lastViewerPosition = new THREE.Vector3();
 const lastRawPlacementPosition = new THREE.Vector3();
+const CASE_COLOR_PALETTE = {
+  white: 0xf4f2ed,
+  black: 0x171a20,
+  apricot: 0xcb9c81,
+  "light-peach": 0xe2c9ba
+};
+const CASE_COLOR_EXCLUDE_PATTERN = /(screen|display|monitor|lcd|led|speaker|glass|logo|button|camera|lens|wheel|caster|cable|shadow|화면|스피커|유리|로고)/i;
 let hasViewerPosition = false;
 let previewMode = false;
 let photoPreviewMode = false;
@@ -382,6 +390,11 @@ function bindEvents() {
   safeClick("placementResetBtn", resetSelectedPlacement);
   safeClick("screenMediaChooseBtn", requestScreenMedia);
   safeClick("screenMediaRemoveBtn", removeSelectedScreenMedia);
+  dom.caseColorChips?.addEventListener("click", (event) => {
+    const chip = event.target.closest("[data-case-color]");
+    if (!chip || !selectedObject) return;
+    applyCaseColorToSelected(chip.dataset.caseColor);
+  });
   safeClick("arMediaResumeBtn", resumeArAfterScreenMedia);
   safeClick("arMediaExitBtn", exitScreenMediaResume);
   safeClick("uiFoldBtn", toggleUiFold);
@@ -2565,6 +2578,84 @@ function findScreenMeshes(root) {
   return [...new Set(meshes)];
 }
 
+function applyCaseColorToSelected(colorId) {
+  if (!selectedObject || !CASE_COLOR_PALETTE[colorId]) return;
+
+  const before = snapshotScene();
+  const changedCount = applyCaseColorToObject(selectedObject, colorId);
+
+  if (!changedCount) {
+    showToast("색상을 변경할 케이스 영역을 찾지 못했습니다.");
+    return;
+  }
+
+  selectedObject.userData.caseColorId = colorId;
+  updateCaseColorUi();
+  recordHistory(before);
+  showToast(`${getCaseColorLabel(colorId)} 케이스로 변경했습니다.`);
+}
+
+function applyCaseColorToObject(object, colorId) {
+  const color = CASE_COLOR_PALETTE[colorId];
+  if (!object || !color) return 0;
+
+  const screenMeshes = new Set(findScreenMeshes(object));
+  let changedCount = 0;
+
+  object.traverse((child) => {
+    if (!child.isMesh || screenMeshes.has(child)) return;
+
+    const names = [
+      child.name,
+      child.geometry?.name,
+      ...(Array.isArray(child.material) ? child.material : [child.material]).map((material) => material?.name)
+    ].filter(Boolean);
+
+    if (names.some((name) => CASE_COLOR_EXCLUDE_PATTERN.test(name))) return;
+
+    const materials = Array.isArray(child.material) ? child.material : [child.material];
+    for (const material of materials) {
+      if (!material?.color || material.transparent || material.opacity < 0.85) continue;
+
+      if (!material.userData.caseColorOriginal) {
+        material.userData.caseColorOriginal = {
+          color: material.color.getHex(),
+          map: material.map || null
+        };
+      }
+
+      // Uniform case panels need their base color to remain visible even when
+      // the source GLB used a dark albedo texture.
+      material.map = null;
+      material.color.setHex(color);
+      material.needsUpdate = true;
+      changedCount += 1;
+    }
+  });
+
+  if (changedCount) object.userData.caseColorId = colorId;
+  return changedCount;
+}
+
+function getCaseColorLabel(colorId) {
+  return {
+    white: "화이트",
+    black: "블랙",
+    apricot: "살구",
+    "light-peach": "라이트 피치"
+  }[colorId] || "선택한 색상";
+}
+
+function updateCaseColorUi() {
+  const selectedColor = selectedObject?.userData?.caseColorId
+    || (selectedObject?.userData?.productId?.includes("black") ? "black" : "white");
+
+  dom.caseColorChips?.querySelectorAll("[data-case-color]").forEach((chip) => {
+    chip.setAttribute("aria-checked", String(Boolean(selectedObject) && chip.dataset.caseColor === selectedColor));
+    chip.disabled = !selectedObject;
+  });
+}
+
 function applyScreenMediaToObject(object, media) {
   const screens = findScreenMeshes(object);
   if (!screens.length) return 0;
@@ -2662,6 +2753,7 @@ function selectObject(obj) {
     hideObjectControlsOverlay();
     refreshCalibrationReadout();
     updateScreenMediaUi();
+    updateCaseColorUi();
     return;
   }
 
@@ -2679,6 +2771,7 @@ function selectObject(obj) {
   refreshCalibrationReadout();
   updateObjectControlsOverlay();
   updateScreenMediaUi();
+  updateCaseColorUi();
 }
 
 function onPhotoPreviewPointerDown(event) {
@@ -3407,6 +3500,7 @@ function snapshotScene() {
   return placedObjects.map((obj) => ({
     productId: obj.userData.productId,
     productName: obj.userData.productName,
+    caseColorId: obj.userData.caseColorId || null,
     position: obj.position.toArray(),
     quaternion: obj.quaternion.toArray(),
     scale: obj.scale.toArray()
@@ -3483,6 +3577,7 @@ async function restoreScene(snapshot) {
       model.userData.userScale = model.scale.x / baseScale.x;
       model.userData.productId = item.productId;
       model.userData.productName = item.productName || product.name;
+      if (item.caseColorId) applyCaseColorToObject(model, item.caseColorId);
       rememberInitialPlacement(model);
 
       scene.add(model);
