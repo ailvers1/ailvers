@@ -704,6 +704,68 @@ button:disabled {
   opacity: .35;
 }
 
+#caseColorBar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  min-height: 35px;
+  padding: 5px 8px;
+  border: 1px solid rgba(255,255,255,.1);
+  border-radius: 13px;
+  background: rgba(255,255,255,.035);
+  box-sizing: border-box;
+}
+
+#caseColorBar > strong {
+  color: #dbe8f5;
+  font-size: 8px;
+  white-space: nowrap;
+}
+
+#caseColorChips {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+
+.caseColorChip {
+  position: relative;
+  width: 23px;
+  height: 23px;
+  padding: 0;
+  border: 2px solid rgba(255,255,255,.22);
+  border-radius: 50%;
+  background: var(--chip-color);
+  box-shadow: inset 0 1px 2px rgba(255,255,255,.4), 0 2px 6px rgba(0,0,0,.22);
+}
+
+.caseColorChip[data-case-color="white"] {
+  --chip-color: #f4f2ed;
+}
+
+.caseColorChip[data-case-color="black"] {
+  --chip-color: #171a20;
+}
+
+.caseColorChip[data-case-color="apricot"] {
+  --chip-color: #cb9c81;
+}
+
+.caseColorChip[data-case-color="light-peach"] {
+  --chip-color: #e2c9ba;
+}
+
+.caseColorChip[aria-checked="true"] {
+  border-color: #7dd3fc;
+  box-shadow: 0 0 0 2px rgba(56,189,248,.24), inset 0 1px 2px rgba(255,255,255,.42);
+}
+
+.caseColorChip:focus-visible {
+  outline: 2px solid #e0f2fe;
+  outline-offset: 2px;
+}
+
 .editEyebrow {
   margin-bottom: 3px;
   color: #38bdf8;
@@ -1626,7 +1688,7 @@ body.ui-clean #calibrationLayer {
 /* Refined AR control dock: compact hierarchy, quiet glass, clear tap targets. */
 #editPanel {
   width: min(336px, calc(100vw - 20px));
-  max-height: min(326px, calc(100dvh - 20px));
+  max-height: min(370px, calc(100dvh - 20px));
   bottom: calc(env(safe-area-inset-bottom, 0px) + 10px);
   gap: 9px;
   padding: 11px;
